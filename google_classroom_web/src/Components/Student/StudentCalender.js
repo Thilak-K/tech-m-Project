@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
 
-const TeacherCalender = () => {
+const StudentCalender = () => {
   const [viewDate, setViewDate] = useState(new Date());
   const today = new Date();
   const currentDate = today.getDate();
@@ -158,4 +158,4 @@ const styles = {
   },
 };
 
-export default TeacherCalender;
+export default StudentCalender;

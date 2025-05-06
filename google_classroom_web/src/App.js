@@ -1,9 +1,9 @@
 
-import TeacherDashboard from "./Components/Teacher/TeacherDashboard";
+import LoginAndSign from "./Components/Authentication/Login&Sign";
 
 function App() {
   return (
-   <TeacherDashboard/>
+   <LoginAndSign/>
   );
 }
 

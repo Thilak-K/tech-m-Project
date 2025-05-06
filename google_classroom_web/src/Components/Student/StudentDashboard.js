@@ -1,31 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  FaBars,
-  FaHome,
-  FaCalendar,
-  FaCog,
-  FaSignOutAlt,
-} from "react-icons/fa";
-import TeacherHome from "./TeacherHome";
-import TeacherCalender from "./TeacherCalender";
-import TeacherSettings from "./TeacherSettings";
+import { FaBars, FaHome, FaCalendar, FaCog, FaSignOutAlt } from "react-icons/fa";
+import StudentHome from "./StudentHome";
+import StudentCalender from "./StudentCalender";
+import StudentSettings from "./StudentSettings";
 
-const TeacherDashboard = ({ children }) => {
+const StudentDashboard = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState("home");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
   const [isJoinClassModalOpen, setIsJoinClassModalOpen] = useState(false);
   const [formData, setFormData] = useState({
-    className: "",
-    section: "",
-    subject: "",
     classCode: "",
   });
 
-  // Ref to track the dropdown element
   const dropdownRef = useRef(null);
 
   const toggleSidebar = () => {
@@ -33,21 +22,24 @@ const TeacherDashboard = ({ children }) => {
   };
 
   const handleItemClick = (item) => {
-    setSelectedItem(item);
+    if (item === "logout") {
+      handleLogout();
+    } else {
+      setSelectedItem(item);
+    }
+  };
+
+  const handleLogout = () => {
+    // In a real app, you'd clear authentication data (e.g., tokens) and redirect to login
+    console.log("User logged out successfully");
+    // Example: localStorage.removeItem("authToken");
+    // Example redirect (if using React Router): history.push("/login");
+    // For now, we'll reset the dashboard state to simulate logout
+    setSelectedItem("home");
   };
 
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
-  };
-
-  const openCreateClassModal = () => {
-    setIsDropdownOpen(false);
-    setIsCreateClassModalOpen(true);
-  };
-
-  const closeCreateClassModal = () => {
-    setIsCreateClassModalOpen(false);
-    setFormData({ ...formData, className: "", section: "", subject: "" }); // Reset Create Class fields
   };
 
   const openJoinClassModal = () => {
@@ -57,22 +49,12 @@ const TeacherDashboard = ({ children }) => {
 
   const closeJoinClassModal = () => {
     setIsJoinClassModalOpen(false);
-    setFormData({ ...formData, classCode: "" }); // Reset Join Class field
+    setFormData({ ...formData, classCode: "" });
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-  };
-
-  const handleCreateClass = () => {
-    if (formData.className.trim()) {
-      // In a real app, you'd handle the class creation (e.g., API call)
-      console.log(
-        `Creating class: ${formData.className}, Section: ${formData.section}, Subject: ${formData.subject}`
-      );
-      closeCreateClassModal();
-    }
   };
 
   const handleJoinClass = () => {
@@ -83,7 +65,6 @@ const TeacherDashboard = ({ children }) => {
     }
   };
 
-  // Handle clicks outside the dropdown to close it
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -100,15 +81,13 @@ const TeacherDashboard = ({ children }) => {
   const renderContent = () => {
     switch (selectedItem) {
       case "home":
-        return <TeacherHome />;
+        return <StudentHome />;
       case "calender":
-        return <TeacherCalender />;
+        return <StudentCalender />;
       case "settings":
-        return <TeacherSettings />;
-      case "logout":
-        return <div>Logout Action Placeholder</div>;
+        return <StudentSettings />;
       default:
-        return <TeacherHome />;
+        return <StudentHome />;
     }
   };
 
@@ -129,9 +108,7 @@ const TeacherDashboard = ({ children }) => {
             style={{
               ...StyleSheet.sidebarItem,
               ...(hoveredItem === "home" ? StyleSheet.sidebarItemHover : {}),
-              ...(selectedItem === "home"
-                ? StyleSheet.sidebarItemSelected
-                : {}),
+              ...(selectedItem === "home" ? StyleSheet.sidebarItemSelected : {}),
             }}
             onMouseEnter={() => setHoveredItem("home")}
             onMouseLeave={() => setHoveredItem(null)}
@@ -156,9 +133,7 @@ const TeacherDashboard = ({ children }) => {
               ...(hoveredItem === "calender"
                 ? StyleSheet.sidebarItemHover
                 : {}),
-              ...(selectedItem === "calender"
-                ? StyleSheet.sidebarItemSelected
-                : {}),
+              ...(selectedItem === "calender" ? StyleSheet.sidebarItemSelected : {}),
             }}
             onMouseEnter={() => setHoveredItem("calender")}
             onMouseLeave={() => setHoveredItem(null)}
@@ -183,9 +158,7 @@ const TeacherDashboard = ({ children }) => {
               ...(hoveredItem === "settings"
                 ? StyleSheet.sidebarItemHover
                 : {}),
-              ...(selectedItem === "settings"
-                ? StyleSheet.sidebarItemSelected
-                : {}),
+              ...(selectedItem === "settings" ? StyleSheet.sidebarItemSelected : {}),
             }}
             onMouseEnter={() => setHoveredItem("settings")}
             onMouseLeave={() => setHoveredItem(null)}
@@ -208,9 +181,7 @@ const TeacherDashboard = ({ children }) => {
             style={{
               ...StyleSheet.sidebarItem,
               ...(hoveredItem === "logout" ? StyleSheet.sidebarItemHover : {}),
-              ...(selectedItem === "logout"
-                ? StyleSheet.sidebarItemSelected
-                : {}),
+              ...(selectedItem === "logout" ? StyleSheet.sidebarItemSelected : {}),
               marginTop: "auto",
               position: "absolute",
               bottom: "20px",
@@ -238,7 +209,7 @@ const TeacherDashboard = ({ children }) => {
         <div style={StyleSheet.headerLeft}>
           <FaBars style={StyleSheet.toggleIcon} onClick={toggleSidebar} />
           <div style={StyleSheet.logoContainer}>
-            <span style={StyleSheet.appName}>Teacher Classroom</span>
+            <span style={StyleSheet.appName}> Student Classroom</span>
           </div>
         </div>
         <div style={StyleSheet.headerRight}>
@@ -248,12 +219,6 @@ const TeacherDashboard = ({ children }) => {
             </span>
             {isDropdownOpen && (
               <div style={StyleSheet.dropdown}>
-                <div
-                  style={StyleSheet.dropdownItem}
-                  onClick={openCreateClassModal}
-                >
-                  Create class
-                </div>
                 <div
                   style={StyleSheet.dropdownItem}
                   onClick={openJoinClassModal}
@@ -284,62 +249,6 @@ const TeacherDashboard = ({ children }) => {
       >
         {renderContent()}
       </main>
-
-      {/* Create Class Modal */}
-      {isCreateClassModalOpen && (
-        <div style={StyleSheet.modalOverlay}>
-          <div style={StyleSheet.modal}>
-            <h2 style={StyleSheet.modalTitle}>Create Class</h2>
-            <div style={StyleSheet.modalContent}>
-              <label style={StyleSheet.label}>Class Name</label>
-              <input
-                type="text"
-                name="className"
-                value={formData.className}
-                onChange={handleInputChange}
-                style={StyleSheet.input}
-                placeholder="Enter class name"
-                required
-              />
-              <label style={StyleSheet.label}>Section</label>
-              <input
-                type="text"
-                name="section"
-                value={formData.section}
-                onChange={handleInputChange}
-                style={StyleSheet.input}
-                placeholder="Enter Section"
-                required
-              />
-              <label style={StyleSheet.label}>Subject</label>
-              <input
-                type="text"
-                name="subject"
-                value={formData.subject}
-                onChange={handleInputChange}
-                style={StyleSheet.input}
-                placeholder="Enter Subject"
-                required
-              />
-            </div>
-            <div style={StyleSheet.modalActions}>
-              <button
-                style={StyleSheet.cancelButton}
-                onClick={closeCreateClassModal}
-              >
-                Cancel
-              </button>
-              <button
-                style={StyleSheet.submitButton}
-                onClick={handleCreateClass}
-                disabled={!formData.className.trim()}
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Join Class Modal */}
       {isJoinClassModalOpen && (
@@ -435,7 +344,6 @@ const StyleSheet = {
   },
   sidebarIcon: {
     fontSize: "24px",
-    marginRight: "15px",
     width: "24px",
     flexShrink: 0,
   },
@@ -607,4 +515,4 @@ const StyleSheet = {
   },
 };
 
-export default TeacherDashboard;
+export default StudentDashboard;
