@@ -47,7 +47,7 @@ const TeacherDashboard = ({ children }) => {
 
   const closeCreateClassModal = () => {
     setIsCreateClassModalOpen(false);
-    setFormData({ ...formData, className: "", section: "", subject: "" }); // Reset Create Class fields
+    setFormData({ ...formData, className: "", section: "", subject: "" }); 
   };
 
   const openJoinClassModal = () => {
@@ -57,7 +57,7 @@ const TeacherDashboard = ({ children }) => {
 
   const closeJoinClassModal = () => {
     setIsJoinClassModalOpen(false);
-    setFormData({ ...formData, classCode: "" }); // Reset Join Class field
+    setFormData({ ...formData, classCode: "" }); 
   };
 
   const handleInputChange = (e) => {
@@ -67,7 +67,7 @@ const TeacherDashboard = ({ children }) => {
 
   const handleCreateClass = () => {
     if (formData.className.trim()) {
-      // In a real app, you'd handle the class creation (e.g., API call)
+      
       console.log(
         `Creating class: ${formData.className}, Section: ${formData.section}, Subject: ${formData.subject}`
       );

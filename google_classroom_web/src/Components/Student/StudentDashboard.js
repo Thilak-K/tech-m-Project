@@ -1,26 +1,28 @@
-import React, { useState, useEffect, useRef } from "react";
-import { FaBars, FaHome, FaCalendar, FaCog, FaSignOutAlt } from "react-icons/fa";
+import { useState, useEffect, useRef } from "react";
+import { FaBars, FaHome, FaCalendar, FaCog, FaSignOutAlt, FaBook } from "react-icons/fa";
 import StudentHome from "./StudentHome";
 import StudentCalender from "./StudentCalender";
 import StudentSettings from "./StudentSettings";
+import HomeworkProgress from "./HomeworkProgress";
 
-const StudentDashboard = ({ children }) => {
+
+const StudentDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState("home");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isJoinClassModalOpen, setIsJoinClassModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    classCode: "",
-  });
-
+  const [formData, setFormData] = useState({classCode: ""});
   const dropdownRef = useRef(null);
 
+  
+  //side bar toggle
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
-
+  
+  //side bar clicked items
   const handleItemClick = (item) => {
     if (item === "logout") {
       handleLogout();
@@ -28,38 +30,40 @@ const StudentDashboard = ({ children }) => {
       setSelectedItem(item);
     }
   };
-
+  
+  // handle logout
   const handleLogout = () => {
-    // In a real app, you'd clear authentication data (e.g., tokens) and redirect to login
-    console.log("User logged out successfully");
-    // Example: localStorage.removeItem("authToken");
-    // Example redirect (if using React Router): history.push("/login");
-    // For now, we'll reset the dashboard state to simulate logout
-    setSelectedItem("home");
+    localStorage.removeItem("jwtToken");
+    localStorage.removeItem("userRole");
+    alert("User Log out sucessfull");
+    
   };
-
+  
+  // handle dropdown
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
-
+  
+  // join class modal open
   const openJoinClassModal = () => {
     setIsDropdownOpen(false);
     setIsJoinClassModalOpen(true);
   };
-
+   // join class modal close
   const closeJoinClassModal = () => {
     setIsJoinClassModalOpen(false);
     setFormData({ ...formData, classCode: "" });
   };
-
+   
+  //handle text input 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
-
+  
+  // handle join class modal
   const handleJoinClass = () => {
     if (formData.classCode.trim()) {
-      // In a real app, you'd handle the class joining (e.g., API call)
       console.log(`Joining class with code: ${formData.classCode}`);
       closeJoinClassModal();
     }
@@ -86,6 +90,8 @@ const StudentDashboard = ({ children }) => {
         return <StudentCalender />;
       case "settings":
         return <StudentSettings />;
+      case "progess":
+        return <HomeworkProgress />;
       default:
         return <StudentHome />;
     }
@@ -149,6 +155,22 @@ const StudentDashboard = ({ children }) => {
               }}
             >
               Calender
+            </span>
+          </li>
+
+          <li
+            style={{
+              ...StyleSheet.sidebarItem,
+              ...(hoveredItem === "progress" ? StyleSheet.sidebarItemHover : {}),
+              ...(selectedItem === "progress" ? StyleSheet.sidebarItemSelected : {}),
+            }}
+            onMouseEnter={() => setHoveredItem("progress")}
+            onMouseLeave={() => setHoveredItem(null)}
+            onClick={() => handleItemClick("progress")}
+          >
+            <FaBook style={StyleSheet.sidebarIcon} />
+            <span style={{ ...StyleSheet.sidebarText, ...(isSidebarOpen || isHovered ? StyleSheet.sidebarTextVisible : {}) }}>
+              Progress
             </span>
           </li>
 
@@ -240,7 +262,7 @@ const StudentDashboard = ({ children }) => {
         style={{
           flex: 1,
           marginTop: "45px",
-          marginLeft: isSidebarOpen ? "200px" : "60px",
+          marginLeft: isSidebarOpen  || isHovered ? "200px" : "60px",
           transition: "margin-left 0.3s ease",
           minHeight: "calc(100vh - 45px)",
           display: "flex",

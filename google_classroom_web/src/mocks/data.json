@@ -1,0 +1,14 @@
+{
+  "announcements": [
+    { "id": 1, "title": "Welcome to Class", "content": "First class on Monday!", "date": "2025-05-01" }
+  ],
+  "homework": [
+    { "id": 1, "title": "Math Assignment", "description": "Solve problems 1-10", "dueDate": "2025-05-10", "maxPoints": 100, "status": "Not Started" }
+  ],
+  "submissions": [
+    { "id": 1, "homeworkId": 1, "studentId": "S001", "fileUrl": "", "comments": "Please review", "status": "Submitted", "grade": null }
+  ],
+  "users": [
+    { "id": "S001", "name": "John Doe", "class": "Math 101", "role": "STUDENT" }
+  ]
+}
