@@ -6,9 +6,12 @@ import {
   FaCog,
   FaSignOutAlt,
 } from "react-icons/fa";
+import {useLocation} from "react-router-dom";
+
 import TeacherHome from "./TeacherHome";
 import TeacherCalender from "./TeacherCalender";
 import TeacherSettings from "./TeacherSettings";
+
 
 const TeacherDashboard = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -25,9 +28,47 @@ const TeacherDashboard = ({ children }) => {
     classCode: "",
   });
 
+  const [userDetails, setUserDetails] = useState(null);
+  const [error, setError] = useState("");
+
   // Ref to track the dropdown element
   const dropdownRef = useRef(null);
 
+  // Access userId from navigation state
+  const location = useLocation();
+  const userId = location.state?.userId;
+
+  // Fetch user details from the backend
+  useEffect(()=> {
+    const fetchUserDetails = async () => {
+      if(!userId) {
+        setError("User ID not found");
+        return;
+      }
+
+      try {
+        const  response =await fetch(`http://localhost:8080/api/auth/users/${userId}`,{
+          method: "GET",
+          headers: {
+            "content-Type":"application/json",
+          },
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          setUserDetails(data);
+        } else {
+          setError(data.message || "Failed to fetch user details.");
+        }
+      } catch (err) {
+        setError("An error occurred while fetching user details.");
+      }
+    };
+
+    fetchUserDetails();
+  },[userId]);
+
+  // Toggle sidebar
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
@@ -67,10 +108,6 @@ const TeacherDashboard = ({ children }) => {
 
   const handleCreateClass = () => {
     if (formData.className.trim()) {
-      
-      console.log(
-        `Creating class: ${formData.className}, Section: ${formData.section}, Subject: ${formData.subject}`
-      );
       closeCreateClassModal();
     }
   };
@@ -78,7 +115,6 @@ const TeacherDashboard = ({ children }) => {
   const handleJoinClass = () => {
     if (formData.classCode.trim()) {
       // In a real app, you'd handle the class joining (e.g., API call)
-      console.log(`Joining class with code: ${formData.classCode}`);
       closeJoinClassModal();
     }
   };
@@ -265,8 +301,12 @@ const TeacherDashboard = ({ children }) => {
           </div>
 
           <div style={StyleSheet.profilecontiner}>
-            <div style={StyleSheet.profileIcon}></div>
-            <span style={StyleSheet.accountName}>Thilak</span>
+            <div style={StyleSheet.profileIcon}>
+              {userDetails && userDetails.name ? userDetails.name.charAt(0).toUpperCase() : ""}
+              </div>
+            <span style={StyleSheet.accountName}>
+              {userDetails ? userDetails.name : "Loading..."}
+            </span>
           </div>
         </div>
       </header>
@@ -275,7 +315,7 @@ const TeacherDashboard = ({ children }) => {
         style={{
           flex: 1,
           marginTop: "45px",
-          marginLeft: isSidebarOpen ? "200px" : "60px",
+          marginLeft: isSidebarOpen || isHovered ? "230px" : "60px",
           transition: "margin-left 0.3s ease",
           minHeight: "calc(100vh - 45px)",
           display: "flex",
@@ -523,15 +563,21 @@ const StyleSheet = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 2,
+    gap: 5,
     padding: "2px 10px",
   },
   profileIcon: {
-    width: "34px",
-    height: "34px",
-    backgroundColor: "#D3D3D3",
+    width: "36px",
+    height: "36px",
+    backgroundColor: "linear-gradient(135deg, #D0D0D0, #A9A9A9)",
     borderRadius: "50%",
+    display:"flex",
+    alignItems:'center',
+    justifyContent: "center",
+    color:"#707070",
+    fontSize:"1.44rem",
     cursor: "pointer",
+
   },
   modalOverlay: {
     position: "fixed",

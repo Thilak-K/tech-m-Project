@@ -1,121 +1,263 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 
 const TeacherSettings = () => {
-  
-  const [accountName, setAccountName] = useState("Thilak"); 
-  const [tempName, setTempName] = useState(accountName); 
+  const [userDetails, setUserDetails] = useState(null);
+  const [tempName, setTempName] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isButtonHovered, setIsButtonHovered] = useState(false);
 
-  
-  const [isDarkTheme, setIsDarkTheme] = useState(false);
+  const location = useLocation();
+  const userId = location.state?.userId;
 
-  
-  const handleNameChange = (e) => {
-    setTempName(e.target.value);
-  };
+  useEffect(() => {
+    const fetchUserDetails = async () => {
+      if (!userId) {
+        setMessage("User ID not found");
+        return;
+      }
 
-  
-  const handleSaveName = () => {
-    setAccountName(tempName);
-    
-  };
+      try {
+        const response = await fetch(`http://localhost:8080/api/auth/users/${userId}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
 
- 
-  const handleThemeToggle = () => {
-    setIsDarkTheme(!isDarkTheme);
-    
+        const data = await response.json();
+        if (response.ok) {
+          setUserDetails(data);
+          setTempName(data.name || "");
+          setTempPassword(data.password || "");
+        } else {
+          setMessage(data.message || "Failed to fetch user details.");
+        }
+      } catch (err) {
+        setMessage("An error occurred while fetching user details.");
+      }
+    };
+
+    fetchUserDetails();
+  }, [userId]);
+
+  const handleSaveChanges = async () => {
+    if (!userDetails) return;
+
+    setIsLoading(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/auth/users/${userId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: tempName,
+          password: tempPassword || undefined,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setUserDetails({ ...userDetails, name: tempName, password: tempPassword });
+        setMessage("Changes saved successfully!");
+      } else {
+        setMessage(data.message || "Failed to save changes.");
+      }
+    } catch (err) {
+      setMessage("An error occurred while saving changes.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div style={styles.container}>
       <h2 style={styles.header}>Settings</h2>
 
-     
-      <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Account Name</h3>
-        <div style={styles.inputGroup}>
-          <input
-            type="text"
-            value={tempName}
-            onChange={handleNameChange}
-            style={styles.input}
-            placeholder="Enter your name"
-          />
-          <button
-            onClick={handleSaveName}
-            style={styles.saveButton}
-            disabled={tempName === accountName || tempName.trim() === ""}
-          >
-            Save
-          </button>
-        </div>
-        <p style={styles.currentName}>Current name: {accountName}</p>
-      </div>
+      {userDetails ? (
+        <div style={styles.card}>
+          <h3 style={styles.cardHeader}>Profile Details</h3>
 
-      
-      <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Theme</h3>
-        <div style={styles.toggleGroup}>
-          <span style={styles.label}>Light</span>
-          <label style={styles.switch}>
+          {/* User ID */}
+          <div style={styles.field}>
+            <label style={styles.label}>User ID</label>
             <input
-              type="checkbox"
-              checked={isDarkTheme}
-              onChange={handleThemeToggle}
+              type="text"
+              value={userDetails.id || ""}
+              style={styles.inputDisabled}
+              readOnly
+              disabled
             />
-            <span style={styles.slider}></span>
-          </label>
-          <span style={styles.label}>Dark</span>
+          </div>
+
+          <hr style={styles.divider} />
+
+          {/* Email */}
+          <div style={styles.field}>
+            <label style={styles.label}>Email</label>
+            <input
+              type="text"
+              value={userDetails.email || ""}
+              style={styles.inputDisabled}
+              readOnly
+              disabled
+            />
+          </div>
+
+          <hr style={styles.divider} />
+
+          {/* Name */}
+          <div style={styles.field}>
+            <label style={styles.label}>Name</label>
+            <input
+              type="text"
+              value={tempName}
+              onChange={(e) => setTempName(e.target.value)}
+              style={styles.input}
+              placeholder="Enter your name"
+            />
+          </div>
+
+          <hr style={styles.divider} />
+
+          {/* Password */}
+          <div style={styles.field}>
+            <label style={styles.label}>Password</label>
+            {userDetails.password ? (
+              <input
+                type="password"
+                value={tempPassword}
+                onChange={(e) => setTempPassword(e.target.value)}
+                style={styles.input}
+                placeholder="Enter new password"
+              />
+            ) : (
+              <input
+                type="text"
+                value="Google User"
+                style={styles.inputDisabled}
+                readOnly
+                disabled
+              />
+            )}
+          </div>
+
+          <button
+            style={{
+              ...styles.saveButton,
+              ...(isLoading ||
+              (tempName === userDetails.name && tempPassword === userDetails.password) ||
+              tempName.trim() === ""
+                ? styles.saveButton[":disabled"]
+                : (isButtonHovered ? { backgroundColor: "#3267d6" } : {})),
+            }}
+            disabled={
+              isLoading ||
+              (tempName === userDetails.name && tempPassword === userDetails.password) ||
+              tempName.trim() === ""
+            }
+            onClick={handleSaveChanges}
+            onMouseEnter={() => setIsButtonHovered(true)}
+            onMouseLeave={() => setIsButtonHovered(false)}
+          >
+            {isLoading ? "Saving..." : "Save Changes"}
+          </button>
+
+          {message && (
+            <p
+              style={{
+                ...styles.message,
+                color: message.includes("successfully") ? "#34a853" : "#d93025",
+              }}
+            >
+              {message}
+            </p>
+          )}
         </div>
-        <p style={styles.currentTheme}>
-          Current theme: {isDarkTheme ? "Dark" : "Light"}
-        </p>
-      </div>
+      ) : (
+        <p style={styles.loading}>Loading user details...</p>
+      )}
     </div>
   );
 };
 
 const styles = {
   container: {
-    padding: "20px",
-    backgroundColor: "#fff",
-    height: "100%",
-    width: "100%",
+    padding: "24px",
+    backgroundColor: "#f5f5f5",
+    minHeight: "100vh",
     boxSizing: "border-box",
     color: "#202124",
+    fontFamily: "'Roboto', sans-serif",
   },
   header: {
-    fontSize: "24px",
-    fontWeight: "500",
-    marginBottom: "20px",
+    fontSize: "28px",
+    fontWeight: "600",
+    marginBottom: "24px",
     color: "#202124",
   },
-  section: {
-    marginBottom: "30px",
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: "12px",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+    padding: "20px",
+    maxWidth: "450px",
+    margin: "0 auto",
   },
-  sectionTitle: {
+  cardHeader: {
     fontSize: "18px",
     fontWeight: "500",
-    marginBottom: "10px",
-    color: "#5f6368",
+    color: "#202124",
+    marginBottom: "20px",
+    borderBottom: "1px solid #e0e0e0",
+    paddingBottom: "8px",
   },
-  inputGroup: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    marginBottom: "10px",
+  field: {
+    marginBottom: "16px",
+  },
+  label: {
+    display: "block",
+    fontSize: "13px",
+    fontWeight: "500",
+    color: "#5f6368",
+    marginBottom: "6px",
   },
   input: {
+    width: "100%",
     padding: "8px 12px",
     fontSize: "14px",
     border: "1px solid #dadce0",
     borderRadius: "4px",
-    flex: 1,
-    maxWidth: "300px",
     outline: "none",
     color: "#202124",
+    boxSizing: "border-box",
+  },
+  inputDisabled: {
+    width: "100%",
+    padding: "8px 12px",
+    fontSize: "14px",
+    border: "1px solid #dadce0",
+    borderRadius: "4px",
+    outline: "none",
+    color: "#5f6368",
+    boxSizing: "border-box",
+    backgroundColor: "#f1f3f4",
+    cursor: "not-allowed",
+  },
+  divider: {
+    border: "none",
+    borderTop: "1px solid #e0e0e0",
+    margin: "12px 0",
   },
   saveButton: {
-    padding: "8px 16px",
+    display: "block",
+    width: "100%",
+    padding: "10px",
     fontSize: "14px",
     fontWeight: "500",
     color: "#fff",
@@ -124,61 +266,20 @@ const styles = {
     borderRadius: "4px",
     cursor: "pointer",
     transition: "background-color 0.2s",
+    ":disabled": {
+      backgroundColor: "#cccccc",
+      cursor: "not-allowed",
+    },
   },
-  currentName: {
-    fontSize: "14px",
+  message: {
+    marginTop: "16px",
+    fontSize: "13px",
+    textAlign: "center",
+  },
+  loading: {
+    fontSize: "16px",
     color: "#5f6368",
-  },
-  toggleGroup: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    marginBottom: "10px",
-  },
-  label: {
-    fontSize: "14px",
-    color: "#202124",
-  },
-  switch: {
-    position: "relative",
-    display: "inline-block",
-    width: "40px",
-    height: "20px",
-  },
-  slider: {
-    position: "absolute",
-    cursor: "pointer",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#ccc",
-    transition: "0.4s",
-    borderRadius: "20px",
-  },
-  "slider:before": {
-    position: "absolute",
-    content: '""',
-    height: "16px",
-    width: "16px",
-    left: "2px",
-    bottom: "2px",
-    backgroundColor: "white",
-    transition: "0.4s",
-    borderRadius: "50%",
-  },
-  "input:checked + .slider": {
-    backgroundColor: "#4285f4",
-  },
-  "input:checked + .slider:before": {
-    transform: "translateX(20px)",
-  },
-  "input:focus + .slider": {
-    boxShadow: "0 0 1px #4285f4",
-  },
-  currentTheme: {
-    fontSize: "14px",
-    color: "#5f6368",
+    textAlign: "center",
   },
 };
 
