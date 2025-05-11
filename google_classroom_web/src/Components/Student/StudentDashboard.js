@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { FaBars, FaHome, FaCalendar, FaCog, FaSignOutAlt, FaBook } from "react-icons/fa";
+import { useLocation, useNavigate } from "react-router-dom";
 import StudentHome from "./StudentHome";
 import StudentCalender from "./StudentCalender";
 import StudentSettings from "./StudentSettings";
 import HomeworkProgress from "./HomeworkProgress";
-
 
 const StudentDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -13,16 +13,77 @@ const StudentDashboard = () => {
   const [selectedItem, setSelectedItem] = useState("home");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isJoinClassModalOpen, setIsJoinClassModalOpen] = useState(false);
-  const [formData, setFormData] = useState({classCode: ""});
+  const [formData, setFormData] = useState({ classCode: "" });
+  const [userDetails, setUserDetails] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const dropdownRef = useRef(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Retrieve userId from location.state or localStorage
+  const userId = location.state?.userId || localStorage.getItem("userId");
+
+  useEffect(() => {
+    if (!userId) {
+      console.error("No userId found in location.state or localStorage. Redirecting to login.");
+      navigate("/", { replace: true });
+      return;
+    }
+
+    // Store userId in localStorage for persistence
+    localStorage.setItem("userId", userId);
+    console.log("Stored userId in localStorage:", userId);
+
+    // Fetch user details
+    const fetchUserDetails = async () => {
+      try {
+        const response = await fetch(`http://localhost:8080/api/auth/users/${userId}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("jwtToken")}`,
+          },
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          setUserDetails(data);
+        } else {
+          setError(data.message || "Failed to fetch user details.");
+          navigate("/", { replace: true });
+        }
+      } catch (err) {
+        setError("An error occurred while fetching user details.");
+        navigate("/", { replace: true });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserDetails();
+  }, [userId, navigate]);
 
   
-  //side bar toggle
+  useEffect(() => {
+    const preventGoBack = () => {
+      window.history.pushState(null, "", window.location.href);
+    };
+
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener("popstate", preventGoBack);
+
+    return () => {
+      window.removeEventListener("popstate", preventGoBack);
+    };
+  }, []);
+
+  // Sidebar toggle
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
-  
-  //side bar clicked items
+
+  // Sidebar clicked items
   const handleItemClick = (item) => {
     if (item === "logout") {
       handleLogout();
@@ -30,42 +91,68 @@ const StudentDashboard = () => {
       setSelectedItem(item);
     }
   };
-  
-  // handle logout
+
+  // Handle logout
   const handleLogout = () => {
     localStorage.removeItem("jwtToken");
     localStorage.removeItem("userRole");
-    alert("User Log out sucessfull");
-    
+    localStorage.removeItem("userId");
+    localStorage.clear();
+    navigate("/", { replace: true });
   };
-  
-  // handle dropdown
+
+  // Handle dropdown
   const toggleDropdown = () => {
     setIsDropdownOpen(!isDropdownOpen);
   };
-  
-  // join class modal open
+
+  // Join class modal open
   const openJoinClassModal = () => {
     setIsDropdownOpen(false);
     setIsJoinClassModalOpen(true);
   };
-   // join class modal close
+
+  // Join class modal close
   const closeJoinClassModal = () => {
     setIsJoinClassModalOpen(false);
     setFormData({ ...formData, classCode: "" });
   };
-   
-  //handle text input 
+
+  // Handle text input
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
-  
-  // handle join class modal
-  const handleJoinClass = () => {
+
+  // Handle join class modal
+  const handleJoinClass = async () => {
     if (formData.classCode.trim()) {
-      console.log(`Joining class with code: ${formData.classCode}`);
-      closeJoinClassModal();
+      try {
+        const response = await fetch("http://localhost:8080/api/classes/join", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("jwtToken")}`,
+          },
+          body: JSON.stringify({
+            classCode: formData.classCode,
+            userId,
+          }),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          console.log("Class joined successfully:", data);
+          closeJoinClassModal();
+          setSelectedItem("home");
+        } else {
+          setError(data.message || "Failed to join class.");
+        }
+      } catch (err) {
+        setError("An error occurred while joining the class.");
+      }
+    } else {
+      setError("Class code is required.");
     }
   };
 
@@ -85,17 +172,25 @@ const StudentDashboard = () => {
   const renderContent = () => {
     switch (selectedItem) {
       case "home":
-        return <StudentHome />;
-      case "calender":
-        return <StudentCalender />;
+        return <StudentHome userId={userId} />;
+      case "calendar":
+        return <StudentCalender userId={userId} />;
       case "settings":
-        return <StudentSettings />;
-      case "progess":
-        return <HomeworkProgress />;
+        return <StudentSettings userId={userId} />;
+      case "progress":
+        return <HomeworkProgress userId={userId} />;
       default:
-        return <StudentHome />;
+        return <StudentHome userId={userId} />;
     }
   };
+
+  if (loading) {
+    return <div style={{ textAlign: "center", padding: "20px" }}>Loading...</div>;
+  }
+
+  if (!userId) {
+    return null; 
+  }
 
   return (
     <div style={StyleSheet.container}>
@@ -136,14 +231,14 @@ const StudentDashboard = () => {
           <li
             style={{
               ...StyleSheet.sidebarItem,
-              ...(hoveredItem === "calender"
+              ...(hoveredItem === "calendar"
                 ? StyleSheet.sidebarItemHover
                 : {}),
-              ...(selectedItem === "calender" ? StyleSheet.sidebarItemSelected : {}),
+              ...(selectedItem === "calendar" ? StyleSheet.sidebarItemSelected : {}),
             }}
-            onMouseEnter={() => setHoveredItem("calender")}
+            onMouseEnter={() => setHoveredItem("calendar")}
             onMouseLeave={() => setHoveredItem(null)}
-            onClick={() => handleItemClick("calender")}
+            onClick={() => handleItemClick("calendar")}
           >
             <FaCalendar style={StyleSheet.sidebarIcon} />
             <span
@@ -154,7 +249,7 @@ const StudentDashboard = () => {
                   : {}),
               }}
             >
-              Calender
+              Calendar
             </span>
           </li>
 
@@ -231,7 +326,7 @@ const StudentDashboard = () => {
         <div style={StyleSheet.headerLeft}>
           <FaBars style={StyleSheet.toggleIcon} onClick={toggleSidebar} />
           <div style={StyleSheet.logoContainer}>
-            <span style={StyleSheet.appName}> Student Classroom</span>
+            <span style={StyleSheet.appName}>Student Classroom</span>
           </div>
         </div>
         <div style={StyleSheet.headerRight}>
@@ -252,8 +347,12 @@ const StudentDashboard = () => {
           </div>
 
           <div style={StyleSheet.profilecontiner}>
-            <div style={StyleSheet.profileIcon}></div>
-            <span style={StyleSheet.accountName}>Thilak</span>
+            <div style={StyleSheet.profileIcon}>
+              {userDetails && userDetails.name ? userDetails.name.charAt(0).toUpperCase() : ""}
+            </div>
+            <span style={StyleSheet.accountName}>
+              {userDetails ? userDetails.name : "Loading..."}
+            </span>
           </div>
         </div>
       </header>
@@ -262,13 +361,24 @@ const StudentDashboard = () => {
         style={{
           flex: 1,
           marginTop: "45px",
-          marginLeft: isSidebarOpen  || isHovered ? "200px" : "60px",
+          marginLeft: isSidebarOpen || isHovered ? "230px" : "60px",
           transition: "margin-left 0.3s ease",
           minHeight: "calc(100vh - 45px)",
           display: "flex",
           flexDirection: "column",
         }}
       >
+        {error && (
+          <div style={StyleSheet.errorMessage}>
+            {error}
+            <button
+              style={StyleSheet.closeErrorButton}
+              onClick={() => setError("")}
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {renderContent()}
       </main>
 
@@ -453,15 +563,21 @@ const StyleSheet = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 2,
+    gap: 5,
     padding: "2px 10px",
   },
   profileIcon: {
-    width: "34px",
-    height: "34px",
-    backgroundColor: "#D3D3D3",
+    width: "36px",
+    height: "36px",
+    backgroundColor: " #C0C0C0",
     borderRadius: "50%",
+    display: "flex",
+    alignItems: 'center',
+    justifyContent: "center",
+    color: "#707070",
+    fontSize: "1.44rem",
     cursor: "pointer",
+
   },
   modalOverlay: {
     position: "fixed",
@@ -536,5 +652,6 @@ const StyleSheet = {
     transition: "background-color 0.2s",
   },
 };
+
 
 export default StudentDashboard;

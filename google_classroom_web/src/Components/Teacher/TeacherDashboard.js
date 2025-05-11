@@ -6,12 +6,13 @@ import {
   FaCog,
   FaSignOutAlt,
 } from "react-icons/fa";
-import {useLocation} from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { v4 as uuidv4 } from "uuid";
+import axios from "axios";
 
 import TeacherHome from "./TeacherHome";
 import TeacherCalender from "./TeacherCalender";
 import TeacherSettings from "./TeacherSettings";
-
 
 const TeacherDashboard = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -22,59 +23,100 @@ const TeacherDashboard = ({ children }) => {
   const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
   const [isJoinClassModalOpen, setIsJoinClassModalOpen] = useState(false);
   const [formData, setFormData] = useState({
-    className: "",
+    classId: "",
+    classCode: "",
+    subjectCode: "",
     section: "",
     subject: "",
-    classCode: "",
+    teacherName: "",
   });
-
+  const [joinClassCode, setJoinClassCode] = useState("");
+  const [joinError, setJoinError] = useState("");
   const [userDetails, setUserDetails] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  // Ref to track the dropdown element
   const dropdownRef = useRef(null);
-
-  // Access userId from navigation state
   const location = useLocation();
-  const userId = location.state?.userId;
+  const navigate = useNavigate();
 
-  // Fetch user details from the backend
-  useEffect(()=> {
+  // Retrieve userId from location.state or localStorage
+  const userId = location.state?.userId || localStorage.getItem("userId");
+
+  useEffect(() => {
+    if (!userId) {
+      console.error("No userId found in location.state or localStorage. Redirecting to login.");
+      navigate("/", { replace: true });
+      return;
+    }
+
+    // Store userId in localStorage for future use
+    localStorage.setItem("userId", userId);
+    console.log("Stored userId in localStorage:", userId);
+
+    // Fetch user details
     const fetchUserDetails = async () => {
-      if(!userId) {
-        setError("User ID not found");
-        return;
-      }
-
       try {
-        const  response =await fetch(`http://localhost:8080/api/auth/users/${userId}`,{
+        const response = await fetch(`http://localhost:8080/api/auth/users/${userId}`, {
           method: "GET",
           headers: {
-            "content-Type":"application/json",
+            "Content-Type": "application/json",
           },
         });
 
         const data = await response.json();
         if (response.ok) {
           setUserDetails(data);
+          setFormData((prev) => ({ ...prev, teacherName: data.name || "" }));
         } else {
           setError(data.message || "Failed to fetch user details.");
+          navigate("/", { replace: true }); // Redirect to login if user not found
         }
       } catch (err) {
         setError("An error occurred while fetching user details.");
+        navigate("/", { replace: true }); // Redirect to login on error
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchUserDetails();
-  },[userId]);
+  }, [userId, navigate]);
 
-  // Toggle sidebar
+  useEffect(() => {
+    const preventGoBack = () => {
+      window.history.pushState(null, "", window.location.href);
+    };
+
+    preventGoBack();
+    window.addEventListener("popstate", preventGoBack);
+
+    return () => {
+      window.removeEventListener("popstate", preventGoBack);
+    };
+  }, []);
+
+  const generateClassCode = () => {
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
+    for (let i = 0; i < 8; i++) {
+      result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
+  };
+
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
   const handleItemClick = (item) => {
-    setSelectedItem(item);
+    if (item === "logout") {
+      localStorage.removeItem("userId");
+      localStorage.removeItem("userRole");
+      navigate("/", { replace: true });
+    } else {
+      setSelectedItem(item);
+    }
   };
 
   const toggleDropdown = () => {
@@ -83,43 +125,114 @@ const TeacherDashboard = ({ children }) => {
 
   const openCreateClassModal = () => {
     setIsDropdownOpen(false);
+    const newClassId = uuidv4();
+    const newClassCode = generateClassCode();
+    setFormData((prev) => ({
+      ...prev,
+      classId: newClassId,
+      classCode: newClassCode,
+      subjectCode: "",
+      section: "",
+      subject: "",
+    }));
     setIsCreateClassModalOpen(true);
   };
 
   const closeCreateClassModal = () => {
     setIsCreateClassModalOpen(false);
-    setFormData({ ...formData, className: "", section: "", subject: "" }); 
+    setFormData((prev) => ({
+      ...prev,
+      classId: "",
+      classCode: "",
+      subjectCode: "",
+      section: "",
+      subject: "",
+    }));
   };
 
   const openJoinClassModal = () => {
     setIsDropdownOpen(false);
     setIsJoinClassModalOpen(true);
+    setJoinClassCode(""); // Reset join class code
   };
 
   const closeJoinClassModal = () => {
     setIsJoinClassModalOpen(false);
-    setFormData({ ...formData, classCode: "" }); 
+    setJoinClassCode("");
+    setJoinError("");
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
-
-  const handleCreateClass = () => {
-    if (formData.className.trim()) {
-      closeCreateClassModal();
+    if (name === "classCode") {
+      setJoinClassCode(value);
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
     }
   };
 
-  const handleJoinClass = () => {
-    if (formData.classCode.trim()) {
-      // In a real app, you'd handle the class joining (e.g., API call)
-      closeJoinClassModal();
+  const handleCreateClass = async () => {
+    if (
+      formData.subjectCode.trim() &&
+      formData.section.trim() &&
+      formData.subject.trim() &&
+      formData.teacherName.trim() &&
+      formData.classCode.trim()
+    ) {
+      try {
+        const response = await fetch("http://localhost:8080/api/classes/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            classId: formData.classId,
+            classCode: formData.classCode,
+            subjectCode: formData.subjectCode,
+            section: formData.section,
+            subject: formData.subject,
+            teacherName: formData.teacherName,
+            userId: userId,
+          }),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          console.log("Class created successfully:", data);
+          closeCreateClassModal();
+          setSelectedItem("home"); // Refresh the class list
+        } else {
+          setError(data.message || "Failed to create class.");
+        }
+      } catch (err) {
+        setError("An error occurred while creating the class.");
+      }
+    } else {
+      setError("Please fill in all fields.");
     }
   };
 
-  // Handle clicks outside the dropdown to close it
+  const handleJoinClass = async () => {
+    if (!joinClassCode.trim()) {
+      setJoinError("Class code is required.");
+      return;
+    }
+
+    try {
+      const response = await axios.post("http://localhost:8080/api/classes/join", {
+        classCode: joinClassCode,
+        userId,
+      });
+      if (response.status === 200) {
+        closeJoinClassModal();
+        setSelectedItem("home"); // Refresh the class list
+      }
+    } catch (err) {
+      setJoinError(err.response?.data?.message || "Failed to join class. Please try again.");
+      console.error("Error joining class:", err.response?.data || err.message);
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -136,17 +249,25 @@ const TeacherDashboard = ({ children }) => {
   const renderContent = () => {
     switch (selectedItem) {
       case "home":
-        return <TeacherHome />;
+        return <TeacherHome userId={userId} />;
       case "calender":
-        return <TeacherCalender />;
+        return <TeacherCalender userid={userId} />;
       case "settings":
-        return <TeacherSettings />;
+        return <TeacherSettings userid={userId} />;
       case "logout":
         return <div>Logout Action Placeholder</div>;
       default:
-        return <TeacherHome />;
+        return <TeacherHome userId={userId} />;
     }
   };
+
+  if (loading) {
+    return <div style={{ textAlign: "center", padding: "20px" }}>Loading...</div>;
+  }
+
+  if (!userId) {
+    return null; // Redirect will happen in useEffect
+  }
 
   return (
     <div style={StyleSheet.container}>
@@ -303,7 +424,7 @@ const TeacherDashboard = ({ children }) => {
           <div style={StyleSheet.profilecontiner}>
             <div style={StyleSheet.profileIcon}>
               {userDetails && userDetails.name ? userDetails.name.charAt(0).toUpperCase() : ""}
-              </div>
+            </div>
             <span style={StyleSheet.accountName}>
               {userDetails ? userDetails.name : "Loading..."}
             </span>
@@ -322,6 +443,17 @@ const TeacherDashboard = ({ children }) => {
           flexDirection: "column",
         }}
       >
+        {error && (
+          <div style={StyleSheet.errorMessage}>
+            {error}
+            <button
+              style={StyleSheet.closeErrorButton}
+              onClick={() => setError("")}
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {renderContent()}
       </main>
 
@@ -331,16 +463,29 @@ const TeacherDashboard = ({ children }) => {
           <div style={StyleSheet.modal}>
             <h2 style={StyleSheet.modalTitle}>Create Class</h2>
             <div style={StyleSheet.modalContent}>
-              <label style={StyleSheet.label}>Class Name</label>
-              <input
-                type="text"
-                name="className"
-                value={formData.className}
-                onChange={handleInputChange}
-                style={StyleSheet.input}
-                placeholder="Enter class name"
-                required
-              />
+              <label style={StyleSheet.label}>Class Code</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <input
+                  type="text"
+                  value={formData.classCode}
+                  style={{ ...StyleSheet.input, backgroundColor: "#f0f0f0" }}
+                  disabled
+                />
+                <button
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: "#4CAF50",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                  }}
+                  onClick={() => navigator.clipboard.writeText(formData.classCode).then(() => alert("Class code copied to clipboard!"))}
+                >
+                  Copy
+                </button>
+              </div>
               <label style={StyleSheet.label}>Section</label>
               <input
                 type="text"
@@ -348,7 +493,7 @@ const TeacherDashboard = ({ children }) => {
                 value={formData.section}
                 onChange={handleInputChange}
                 style={StyleSheet.input}
-                placeholder="Enter Section"
+                placeholder="Enter section"
                 required
               />
               <label style={StyleSheet.label}>Subject</label>
@@ -358,8 +503,25 @@ const TeacherDashboard = ({ children }) => {
                 value={formData.subject}
                 onChange={handleInputChange}
                 style={StyleSheet.input}
-                placeholder="Enter Subject"
+                placeholder="Enter subject"
                 required
+              />
+              <label style={StyleSheet.label}>Subject Code</label>
+              <input
+                type="text"
+                name="subjectCode"
+                value={formData.subjectCode}
+                onChange={handleInputChange}
+                style={StyleSheet.input}
+                placeholder="Enter subject Code"
+                required
+              />
+              <label style={StyleSheet.label}>Teacher Name</label>
+              <input
+                type="text"
+                value={formData.teacherName}
+                style={{ ...StyleSheet.input, backgroundColor: "#f0f0f0" }}
+                disabled
               />
             </div>
             <div style={StyleSheet.modalActions}>
@@ -372,7 +534,13 @@ const TeacherDashboard = ({ children }) => {
               <button
                 style={StyleSheet.submitButton}
                 onClick={handleCreateClass}
-                disabled={!formData.className.trim()}
+                disabled={
+                  !formData.subjectCode.trim() ||
+                  !formData.section.trim() ||
+                  !formData.subject.trim() ||
+                  !formData.teacherName.trim() ||
+                  !formData.classCode.trim()
+                }
               >
                 Create
               </button>
@@ -391,12 +559,15 @@ const TeacherDashboard = ({ children }) => {
               <input
                 type="text"
                 name="classCode"
-                value={formData.classCode}
+                value={joinClassCode}
                 onChange={handleInputChange}
                 style={StyleSheet.input}
                 placeholder="Enter class code"
                 required
               />
+              {joinError && (
+                <div style={{ color: "red", marginTop: "10px" }}>{joinError}</div>
+              )}
             </div>
             <div style={StyleSheet.modalActions}>
               <button
@@ -408,7 +579,7 @@ const TeacherDashboard = ({ children }) => {
               <button
                 style={StyleSheet.submitButton}
                 onClick={handleJoinClass}
-                disabled={!formData.classCode.trim()}
+                disabled={!joinClassCode.trim()}
               >
                 Join
               </button>
@@ -419,7 +590,6 @@ const TeacherDashboard = ({ children }) => {
     </div>
   );
 };
-
 const StyleSheet = {
   container: {
     display: "flex",
@@ -569,13 +739,13 @@ const StyleSheet = {
   profileIcon: {
     width: "36px",
     height: "36px",
-    backgroundColor: "linear-gradient(135deg, #D0D0D0, #A9A9A9)",
+    backgroundColor: " #C0C0C0",
     borderRadius: "50%",
-    display:"flex",
-    alignItems:'center',
+    display: "flex",
+    alignItems: 'center',
     justifyContent: "center",
-    color:"#707070",
-    fontSize:"1.44rem",
+    color: "#707070",
+    fontSize: "1.44rem",
     cursor: "pointer",
 
   },
@@ -585,72 +755,95 @@ const StyleSheet = {
     left: 0,
     width: "100vw",
     height: "100vh",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 40,
+    zIndex: 2000,
   },
   modal: {
-    backgroundColor: "#fff",
-    borderRadius: "8px",
+    backgroundColor: "#ffffff",
+    borderRadius: "12px",
     width: "400px",
-    maxWidth: "90%",
+    maxWidth: "100%",
     padding: "20px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)",
   },
   modalTitle: {
-    fontSize: "20px",
-    fontWeight: "500",
-    color: "#202124",
+    fontSize: "1.5rem",
+    fontWeight: "bold",
     marginBottom: "20px",
+    color: "#333",
   },
   modalContent: {
-    marginBottom: "20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "15px",
   },
   label: {
-    fontSize: "14px",
+    fontSize: "0.9rem",
     fontWeight: "500",
-    color: "#5f6368",
-    marginBottom: "8px",
-    display: "block",
+    color: "#333",
   },
   input: {
-    width: "80%",
-    padding: "8px 12px",
-    fontSize: "14px",
-    border: "1px solid #dadce0",
-    borderRadius: "4px",
+    width: "90%",
+    padding: "10px",
+    fontSize: "1rem",
+    border: "1px solid #ddd",
+    borderRadius: "8px",
     outline: "none",
-    color: "#202124",
+    transition: "border-color 0.2s ease",
+    "&:focus": {
+      borderColor: "#1abc9c",
+    },
   },
   modalActions: {
     display: "flex",
     justifyContent: "flex-end",
     gap: "10px",
+    marginTop: "20px",
   },
   cancelButton: {
-    padding: "8px 16px",
-    fontSize: "14px",
-    fontWeight: "500",
-    color: "#5f6368",
-    backgroundColor: "#f1f3f4",
+    padding: "10px 20px",
+    fontSize: "0.9rem",
+    color: "#666",
+    backgroundColor: "#f0f0f0",
     border: "none",
-    borderRadius: "4px",
+    borderRadius: "8px",
     cursor: "pointer",
-    transition: "background-color 0.2s",
+    transition: "background-color 0.2s ease",
+    "&:hover": {
+      backgroundColor: "#e0e0e0",
+    },
   },
   submitButton: {
-    padding: "8px 16px",
-    fontSize: "14px",
-    fontWeight: "500",
-    color: "#fff",
-    backgroundColor: "#4285f4",
+    padding: "10px 20px",
+    fontSize: "0.9rem",
+    color: "#ffffff",
+    backgroundColor: "#1abc9c",
     border: "none",
-    borderRadius: "4px",
+    borderRadius: "8px",
     cursor: "pointer",
-    transition: "background-color 0.2s",
+    transition: "background-color 0.2s ease",
+    "&:hover": {
+      backgroundColor: "#16a085",
+    },
+    "&:disabled": {
+      backgroundColor: "#bdc3c7",
+      cursor: "not-allowed",
+    },
   },
-};
+  errorMessage: {
+    backgroundColor: "#ffebee",
+    color: "#c62828",
+    padding: "10px 15px",
+    borderRadius: "8px",
+    margin: "10px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    fontSize: "0.9rem",
+  },
+}
 
 export default TeacherDashboard;
