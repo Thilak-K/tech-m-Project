@@ -21,19 +21,15 @@ const StudentDashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Retrieve userId from location.state or localStorage
+  // Retrieve userId only from location.state
   const userId = location.state?.userId || localStorage.getItem("userId");
 
   useEffect(() => {
     if (!userId) {
-      console.error("No userId found in location.state or localStorage. Redirecting to login.");
+      console.error("No userId found in location.state. Redirecting to login.");
       navigate("/", { replace: true });
       return;
     }
-
-    // Store userId in localStorage for persistence
-    localStorage.setItem("userId", userId);
-    console.log("Stored userId in localStorage:", userId);
 
     // Fetch user details
     const fetchUserDetails = async () => {
@@ -41,11 +37,8 @@ const StudentDashboard = () => {
         const response = await fetch(`http://localhost:8080/api/auth/users/${userId}`, {
           method: "GET",
           headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("jwtToken")}`,
-          },
+            "Content-Type": "application/json"},
         });
-
         const data = await response.json();
         if (response.ok) {
           setUserDetails(data);
@@ -64,7 +57,6 @@ const StudentDashboard = () => {
     fetchUserDetails();
   }, [userId, navigate]);
 
-  
   useEffect(() => {
     const preventGoBack = () => {
       window.history.pushState(null, "", window.location.href);
@@ -96,7 +88,6 @@ const StudentDashboard = () => {
   const handleLogout = () => {
     localStorage.removeItem("jwtToken");
     localStorage.removeItem("userRole");
-    localStorage.removeItem("userId");
     localStorage.clear();
     navigate("/", { replace: true });
   };
@@ -132,7 +123,6 @@ const StudentDashboard = () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("jwtToken")}`,
           },
           body: JSON.stringify({
             classCode: formData.classCode,
@@ -420,7 +410,6 @@ const StudentDashboard = () => {
     </div>
   );
 };
-
 const StyleSheet = {
   container: {
     display: "flex",

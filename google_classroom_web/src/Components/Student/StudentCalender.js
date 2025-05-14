@@ -32,13 +32,13 @@ const StudentCalendar = ({ userId }) => {
 
   const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  // Calculate the start of the week (Monday)
+  
   const startOfWeek = new Date(viewDate);
-  const dayOfWeek = startOfWeek.getDay(); // 0 (Sun) to 6 (Sat)
-  const daysFromMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1); // Adjust to make Monday the start
+  const dayOfWeek = startOfWeek.getDay(); 
+  const daysFromMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1); 
   startOfWeek.setDate(viewDate.getDate() - daysFromMonday);
 
-  // Generate the 7 days of the week (Monday to Sunday)
+  
   const days = [];
   for (let i = 0; i < 7; i++) {
     const currentDay = new Date(startOfWeek);
@@ -46,13 +46,12 @@ const StudentCalendar = ({ userId }) => {
     days.push(currentDay);
   }
 
-  // Fetch classes and homework
   useEffect(() => {
     const fetchClassesAndHomework = async () => {
       setLoading(true);
       setError("");
       try {
-        // Fetch classes the student has joined
+        
         const classesResponse = await axios.get(
           `http://localhost:8080/api/classes?userId=${userId}&type=joined`,
           {
@@ -64,7 +63,7 @@ const StudentCalendar = ({ userId }) => {
         const joinedClasses = classesResponse.data.data || [];
         setClasses(joinedClasses);
 
-        // Fetch homework for each class
+     
         const allHomework = [];
         for (const cls of joinedClasses) {
           try {
@@ -91,7 +90,7 @@ const StudentCalendar = ({ userId }) => {
           }
         }
 
-        // Filter homework to only include those in the current year
+       
         const filteredHomework = allHomework.filter(
           (hw) => new Date(hw.dueDate).getFullYear() === displayYear
         );
@@ -125,7 +124,7 @@ const StudentCalendar = ({ userId }) => {
     setViewDate(new Date());
   };
 
-  // Helper to format date for comparison (YYYY-MM-DD)
+  
   const formatDateForComparison = (date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
       2,
@@ -133,7 +132,7 @@ const StudentCalendar = ({ userId }) => {
     )}-${String(date.getDate()).padStart(2, "0")}`;
   };
 
-  // Render the calendar
+  
   const renderDays = () => {
     return days.map((day, index) => {
       const isToday =
@@ -141,7 +140,7 @@ const StudentCalendar = ({ userId }) => {
         day.getMonth() === today.getMonth() &&
         day.getFullYear() === today.getFullYear();
 
-      // Find homework due on this day
+     
       const dueHomework = homeworkList.filter((hw) => {
         const dueDate = new Date(hw.dueDate);
         return formatDateForComparison(dueDate) === formatDateForComparison(day);
@@ -256,13 +255,13 @@ const styles = {
     fontWeight: "500",
   },
   calendar: {
-    display: "flex", // Changed to flex for horizontal layout
+    display: "flex", 
     flexDirection: "row",
     gap: "10px",
     backgroundColor: "#f5f5f5",
     borderRadius: "8px",
     padding: "10px",
-    minHeight: "300px",
+    minHeight: "450px",
   },
   day: {
     flex: 1,

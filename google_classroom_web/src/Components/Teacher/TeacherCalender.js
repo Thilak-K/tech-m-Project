@@ -1,161 +1,341 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import axios from "axios";
 
-const TeacherCalender = () => {
+const TeacherCalendar = ({ userId }) => {
   const [viewDate, setViewDate] = useState(new Date());
+  const [classes, setClasses] = useState([]);
+  const [homeworkList, setHomeworkList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const today = new Date();
-  const currentDate = today.getDate();
   const displayYear = viewDate.getFullYear();
   const displayMonth = viewDate.getMonth();
 
   const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
   ];
 
-  const daysInMonth = new Date(displayYear, displayMonth + 1, 0).getDate();
-  const firstDayOfMonth = new Date(displayYear, displayMonth, 1).getDay();
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  const goToPreviousMonth = () => {
-    setViewDate(new Date(displayYear, displayMonth - 1, 1));
-  };
-
-  const goToNextMonth = () => {
-    setViewDate(new Date(displayYear, displayMonth + 1, 1));
-  };
+  const startOfWeek = new Date(viewDate);
+  const dayOfWeek = startOfWeek.getDay();
+  const daysFromMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
+  startOfWeek.setDate(viewDate.getDate() - daysFromMonday);
 
   const days = [];
-
-  for (let i = 0; i < firstDayOfMonth; i++) {
-    days.push(
-      <div key={`empty-${i}`} style={styles.day}>
-        <div style={styles.date}></div>
-        <div style={styles.taskArea}></div>
-      </div>
-    );
+  for (let i = 0; i < 7; i++) {
+    const currentDay = new Date(startOfWeek);
+    currentDay.setDate(startOfWeek.getDate() + i);
+    days.push(currentDay);
   }
 
-  for (let day = 1; day <= daysInMonth; day++) {
-    const isToday =
-      day === currentDate &&
-      displayMonth === today.getMonth() &&
-      displayYear === today.getFullYear();
-    days.push(
-      <div
-        key={day}
-        style={{
-          ...styles.day,
-          ...(isToday ? styles.today : {}),
-        }}
-      >
-        <div style={styles.date}>{day}</div>
-        <div style={styles.taskArea}></div>
-      </div>
-    );
+  useEffect(() => {
+    const fetchClassesAndHomework = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const createdResponse = await axios.get(
+          `http://localhost:8080/api/classes?userId=${userId}&type=created`
+        );
+        const joinedResponse = await axios.get(
+          `http://localhost:8080/api/classes?userId=${userId}&type=joined`
+        );
+
+        const createdClasses = createdResponse.data.data || [];
+        const joinedClasses = joinedResponse.data.data || [];
+        const allClasses = [...createdClasses, ...joinedClasses];
+        setClasses(allClasses);
+
+        const allHomework = [];
+        for (const cls of allClasses) {
+          try {
+            const homeworkResponse = await axios.get(
+              `http://localhost:8080/api/homework/class/${cls.classId}`
+            );
+            const homework = homeworkResponse.data.data || [];
+            allHomework.push(
+              ...homework.map((hw) => ({
+                ...hw,
+                classSubject: cls.subject,
+              }))
+            );
+          } catch (err) {
+            console.error(`Error fetching homework for class ${cls.classId}:`, err);
+          }
+        }
+
+        const filteredHomework = allHomework.filter(
+          (hw) => new Date(hw.dueDate).getFullYear() === displayYear
+        );
+        setHomeworkList(filteredHomework);
+      } catch (err) {
+        setError("Failed to fetch classes and homework: " + (err.response?.data?.message || err.message));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClassesAndHomework();
+  }, [userId, displayYear]);
+
+  const goToPreviousWeek = () => {
+    const newDate = new Date(viewDate);
+    newDate.setDate(viewDate.getDate() - 7);
+    setViewDate(newDate);
+  };
+
+  const goToNextWeek = () => {
+    const newDate = new Date(viewDate);
+    newDate.setDate(viewDate.getDate() + 7);
+    setViewDate(newDate);
+  };
+
+  const goToToday = () => {
+    setViewDate(new Date());
+  };
+
+  const formatDateForComparison = (date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+
+  const renderDays = () => {
+    return days.map((day, index) => {
+      const isToday =
+        day.getDate() === today.getDate() &&
+        day.getMonth() === today.getMonth() &&
+        day.getFullYear() === today.getFullYear();
+
+      const dueHomework = homeworkList.filter((hw) => {
+        const dueDate = new Date(hw.dueDate);
+        return formatDateForComparison(dueDate) === formatDateForComparison(day);
+      });
+
+      const isOverdue = dueHomework.some(
+        (hw) => new Date(hw.dueDate) < new Date() && !isToday
+      );
+
+      return (
+        <div
+          key={index}
+          style={{
+            ...styles.day,
+            ...(isToday ? styles.today : {}),
+            ...(dueHomework.length > 0 ? (isOverdue ? styles.overdueDay : styles.dueDay) : {}),
+          }}
+        >
+          <div style={styles.dayHeader}>
+            <div style={styles.dayName}>{dayNames[index]}</div>
+            <div
+              style={{
+                ...styles.date,
+                ...(isToday ? styles.todayDate : {}),
+                ...(dueHomework.length > 0 ? styles.dueDate : {}),
+              }}
+            >
+              {day.getDate()}
+            </div>
+          </div>
+          <div style={styles.taskArea}>
+            {dueHomework.map((hw, hwIndex) => (
+              <div key={hwIndex} style={styles.homework}>
+                <span style={styles.className}>{hw.classSubject}: </span>
+                <span style={styles.homeworkTitle}>{hw.title}</span>
+                <span style={styles.dueDateText}>
+                  Due: {new Date(hw.dueDate).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    });
+  };
+
+  if (loading) {
+    return <div style={styles.loading}>Loading...</div>;
+  }
+
+  if (error) {
+    return <div style={styles.error}>{error}</div>;
   }
 
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <FaChevronLeft style={styles.navIcon} onClick={goToPreviousMonth} />
+        <FaChevronLeft style={styles.navIcon} onClick={goToPreviousWeek} />
         <h2 style={styles.month}>
           {monthNames[displayMonth]} {displayYear}
         </h2>
-        <FaChevronRight style={styles.navIcon} onClick={goToNextMonth} />
+        <button style={styles.todayButton} onClick={goToToday}>
+          Today
+        </button>
+        <FaChevronRight style={styles.navIcon} onClick={goToNextWeek} />
       </div>
-      <div style={styles.calendar}>
-        {dayNames.map((dayName, index) => (
-          <div key={index} style={styles.dayName}>
-            {dayName}
-          </div>
-        ))}
-
-        {days}
-      </div>
+      <div style={styles.calendar}>{renderDays()}</div>
     </div>
   );
 };
 
 const styles = {
   container: {
-    padding: "20px",
-    backgroundColor: "#fff",
-    height: "100%",
-    width: "100%",
+    padding: "30px",
+    backgroundColor: "#f5f6fa",
+    minHeight: "100vh",
     boxSizing: "border-box",
-    marginBottom: 20,
+    fontFamily: "'Roboto', sans-serif",
   },
   header: {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: "20px",
-    gap: "15px",
+    marginBottom: "30px",
+    gap: "20px",
+    backgroundColor: "#ffffff",
+    padding: "15px 20px",
+    borderRadius: "12px",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
   },
   month: {
-    fontSize: "22px",
-    fontWeight: "500",
-    color: "#202124",
+    fontSize: "28px",
+    fontWeight: "600",
+    color: "#2c3e50",
+    letterSpacing: "0.5px",
   },
   navIcon: {
-    fontSize: "22px",
-    color: "#5f6368",
+    fontSize: "26px",
+    color: "#34495e",
     cursor: "pointer",
+    transition: "color 0.2s ease",
+  },
+  todayButton: {
+    padding: "8px 20px",
+    border: "none",
+    borderRadius: "8px",
+    backgroundColor: "#3498db",
+    color: "#ffffff",
+    cursor: "pointer",
+    fontSize: "16px",
+    fontWeight: "500",
+    transition: "background-color 0.2s ease, transform 0.1s ease",
+    boxShadow: "0 2px 8px rgba(52, 152, 219, 0.3)",
   },
   calendar: {
-    display: "grid",
-    gridTemplateColumns: "repeat(7, 1fr)",
-    gap: "1px",
-    backgroundColor: "#dadce0",
-    borderRadius: "4px",
-    overflow: "hidden",
-    minHeight: "calc(100% - 60px)",
-  },
-  dayName: {
-    backgroundColor: "#f1f3f4",
-    padding: "10px",
-    textAlign: "center",
-    fontWeight: "500",
-    color: "#5f6368",
-    borderBottom: "1px solid #D0D0D0",
+    display: "flex",
+    flexDirection: "row",
+    gap: "15px",
+    backgroundColor: "#f5f6fa",
+    borderRadius: "12px",
+    padding: "15px",
+    minHeight: "500px",
   },
   day: {
-    backgroundColor: "#fff",
-    padding: "10px",
+    flex: 1,
+    backgroundColor: "#ffffff",
+    padding: "15px",
     display: "flex",
     flexDirection: "column",
-    minHeight: "120px",
-    border: "1px solid #D0D0D0",
+    minHeight: "400px",
+    borderRadius: "10px",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
     boxSizing: "border-box",
+    transition: "transform 0.2s ease",
+  },
+  dayHeader: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    marginBottom: "15px",
+  },
+  dayName: {
+    fontSize: "16px",
+    fontWeight: "500",
+    color: "#7f8c8d",
+    textAlign: "center",
+    marginBottom: "5px",
   },
   date: {
-    fontSize: "18px",
-    fontWeight: "500",
-    color: "#202124",
-    textAlign: "left",
-    marginBottom: "10px",
+    fontSize: "20px",
+    fontWeight: "600",
+    color: "#2c3e50",
+    textAlign: "center",
+    padding: "8px",
+    borderRadius: "50%",
+    width: "40px",
+    height: "40px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f1f3f4",
+  },
+  todayDate: {
+    backgroundColor: "#3498db",
+    color: "#ffffff",
+    boxShadow: "0 2px 8px rgba(52, 152, 219, 0.4)",
+  },
+  dueDate: {
+    border: "2px solid #e74c3c",
+    backgroundColor: "#ffffff",
   },
   taskArea: {
     flex: 1,
-    backgroundColor: "#fff",
-    borderTop: "1px solid #f1f3f4",
-    padding: "5px",
+    backgroundColor: "#ffffff",
+    padding: "10px",
+    overflowY: "auto",
+    borderTop: "1px solid #e0e0e0",
   },
   today: {
-    backgroundColor: "#e8f0fe",
-    border: "1px solid #F0F0F0",
+    border: "2px solid #3498db",
+  },
+  dueDay: {
+    border: "2px solid #e74c3c",
+  },
+  overdueDay: {
+    border: "2px solid #c0392b",
+  },
+  homework: {
+    fontSize: "14px",
+    color: "#2c3e50",
+    marginBottom: "12px",
+    padding: "10px",
+    borderRadius: "6px",
+    backgroundColor: "#fefefe",
+    borderLeft: "4px solid #e74c3c",
+    transition: "background-color 0.2s ease",
+    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.05)",
+  },
+  className: {
+    fontWeight: "500",
+    color: "#7f8c8d",
+    marginRight: "5px",
+  },
+  homeworkTitle: {
+    fontWeight: "500",
+    color: "#e74c3c",
+    display: "block",
+    marginBottom: "4px",
+  },
+  dueDateText: {
+    fontSize: "12px",
+    color: "#e74c3c",
+    fontStyle: "italic",
+  },
+  loading: {
+    padding: "30px",
+    textAlign: "center",
+    color: "#7f8c8d",
+    fontSize: "18px",
+    fontStyle: "italic",
+  },
+  error: {
+    padding: "30px",
+    textAlign: "center",
+    color: "#e74c3c",
+    fontSize: "18px",
+    fontWeight: "500",
   },
 };
 
-export default TeacherCalender;
+export default TeacherCalendar;

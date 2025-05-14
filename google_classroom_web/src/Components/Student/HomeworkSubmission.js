@@ -3,10 +3,10 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 
 const HomeworkSubmission = () => {
-  const { homeworkId } = useParams(); // Get homeworkId from URL
+  const { homeworkId } = useParams(); 
   const navigate = useNavigate();
   const location = useLocation();
-  const { userId } = location.state || {}; // Get userId passed from StudentHome.js
+  const { userId } = location.state || {}; 
   const [homework, setHomework] = useState(null);
   const [driveLink, setDriveLink] = useState("");
   const [error, setError] = useState("");

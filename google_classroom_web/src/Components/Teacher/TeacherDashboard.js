@@ -14,67 +14,214 @@ import TeacherHome from "./TeacherHome";
 import TeacherCalender from "./TeacherCalender";
 import TeacherSettings from "./TeacherSettings";
 
-const TeacherDashboard = ({ children }) => {
+// Sidebar Item Component
+const SidebarItem = ({ item, icon: Icon, isSelected, isHovered, onClick, onMouseEnter, onMouseLeave, isSidebarOpen }) => (
+  <li
+    className={`sidebar-item ${isSelected ? "selected" : ""} ${isHovered ? "hovered" : ""}`}
+    onClick={() => onClick(item)}
+    onMouseEnter={() => onMouseEnter(item)}
+    onMouseLeave={onMouseLeave}
+    style={item === "logout" ? { marginTop: "auto", position: "absolute", bottom: "20px", width: "87.5%" } : {}}
+  >
+    <Icon className="sidebar-icon" />
+    <span className={`sidebar-text ${isSidebarOpen ? "visible" : ""}`}>
+      {item.charAt(0).toUpperCase() + item.slice(1)}
+    </span>
+  </li>
+);
+
+// Modal Components
+const CreateClassModal = ({ formData, onChange, onSubmit, onClose, onCopy }) => (
+  <div className="modal-overlay">
+    <div className="modal">
+      <h2 className="modal-title">Create Class</h2>
+      <div className="modal-content">
+        <label className="label">Class Code</label>
+        <div className="class-code-container">
+          <input
+            type="text"
+            value={formData.classCode}
+            className="input disabled"
+            disabled
+          />
+          <button className="copy-button" onClick={onCopy}>
+            Copy
+          </button>
+        </div>
+        <label className="label">Section</label>
+        <input
+          type="text"
+          name="section"
+          value={formData.section}
+          onChange={onChange}
+          className="input"
+          placeholder="Enter section"
+          required
+        />
+        <label className="label">Subject</label>
+        <input
+          type="text"
+          name="subject"
+          value={formData.subject}
+          onChange={onChange}
+          className="input"
+          placeholder="Enter subject"
+          required
+        />
+        <label className="label">Subject Code</label>
+        <input
+          type="text"
+          name="subjectCode"
+          value={formData.subjectCode}
+          onChange={onChange}
+          className="input"
+          placeholder="Enter subject Code"
+          required
+        />
+        <label className="label">Teacher Name</label>
+        <input
+          type="text"
+          value={formData.teacherName}
+          className="input disabled"
+          disabled
+        />
+      </div>
+      <div className="modal-actions">
+        <button className="cancel-button" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          className="submit-button"
+          onClick={onSubmit}
+          disabled={
+            !formData.subjectCode.trim() ||
+            !formData.section.trim() ||
+            !formData.subject.trim() ||
+            !formData.teacherName.trim() ||
+            !formData.classCode.trim()
+          }
+        >
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const JoinClassModal = ({ joinClassCode, onChange, onSubmit, onClose, joinError }) => (
+  <div className="modal-overlay">
+    <div className="modal">
+      <h2 className="modal-title">Join Class</h2>
+      <div className="modal-content">
+        <label className="label">Class Code</label>
+        <input
+          type="text"
+          name="classCode"
+          value={joinClassCode}
+          onChange={onChange}
+          className="input"
+          placeholder="Enter class code"
+          required
+        />
+        {joinError && <div className="error-message">{joinError}</div>}
+      </div>
+      <div className="modal-actions">
+        <button className="cancel-button" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          className="submit-button"
+          onClick={onSubmit}
+          disabled={!joinClassCode.trim()}
+        >
+          Join
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const LogoutConfirmationModal = ({ onConfirm, onCancel }) => (
+  <div className="modal-overlay">
+    <div className="modal">
+      <h2 className="modal-title">Confirm Logout</h2>
+      <div className="modal-content">
+        <p>Are you sure you want to log out?</p>
+      </div>
+      <div className="modal-actions">
+        <button className="cancel-button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button className="submit-button" onClick={onConfirm}>
+          Logout
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const TeacherDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [hoveredItem, setHoveredItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState("home");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isCreateClassModalOpen, setIsCreateClassModalOpen] = useState(false);
-  const [isJoinClassModalOpen, setIsJoinClassModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    classId: "",
-    classCode: "",
-    subjectCode: "",
-    section: "",
-    subject: "",
-    teacherName: "",
+  const [modalState, setModalState] = useState({
+    type: null,
+    data: {
+      classId: "",
+      classCode: "",
+      subjectCode: "",
+      section: "",
+      subject: "",
+      teacherName: "",
+    },
+    joinClassCode: "",
+    joinError: "",
   });
-  const [joinClassCode, setJoinClassCode] = useState("");
-  const [joinError, setJoinError] = useState("");
   const [userDetails, setUserDetails] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isLogoutLoading, setIsLogoutLoading] = useState(false);
+  const [logoutMessage, setLogoutMessage] = useState("");
+  const [refreshClasses, setRefreshClasses] = useState(0);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const dropdownRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Retrieve userId from location.state or localStorage
-  const userId = location.state?.userId || localStorage.getItem("userId");
+  const user = localStorage.getItem("user");
+  const userId = user ? JSON.parse(user).userId : location.state?.userId;
 
+  // Fetch user details on mount
   useEffect(() => {
     if (!userId) {
-      console.error("No userId found in location.state or localStorage. Redirecting to login.");
+      console.error("No userId found. Redirecting to login.");
       navigate("/", { replace: true });
       return;
     }
 
-    // Store userId in localStorage for future use
-    localStorage.setItem("userId", userId);
-    console.log("Stored userId in localStorage:", userId);
-
-    // Fetch user details
     const fetchUserDetails = async () => {
       try {
         const response = await fetch(`http://localhost:8080/api/auth/users/${userId}`, {
           method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
         });
-
         const data = await response.json();
         if (response.ok) {
           setUserDetails(data);
-          setFormData((prev) => ({ ...prev, teacherName: data.name || "" }));
+          setModalState((prev) => ({
+            ...prev,
+            data: { ...prev.data, teacherName: data.name || "" },
+          }));
         } else {
           setError(data.message || "Failed to fetch user details.");
-          navigate("/", { replace: true }); // Redirect to login if user not found
+          navigate("/", { replace: true });
         }
       } catch (err) {
         setError("An error occurred while fetching user details.");
-        navigate("/", { replace: true }); // Redirect to login on error
+        navigate("/", { replace: true });
       } finally {
         setLoading(false);
       }
@@ -83,19 +230,28 @@ const TeacherDashboard = ({ children }) => {
     fetchUserDetails();
   }, [userId, navigate]);
 
+  // Prevent back navigation
   useEffect(() => {
     const preventGoBack = () => {
       window.history.pushState(null, "", window.location.href);
     };
-
     preventGoBack();
     window.addEventListener("popstate", preventGoBack);
-
-    return () => {
-      window.removeEventListener("popstate", preventGoBack);
-    };
+    return () => window.removeEventListener("popstate", preventGoBack);
   }, []);
 
+  // Handle click outside dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Utility to generate class code
   const generateClassCode = () => {
     const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let result = "";
@@ -105,102 +261,115 @@ const TeacherDashboard = ({ children }) => {
     return result;
   };
 
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
+  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
 
   const handleItemClick = (item) => {
     if (item === "logout") {
-      localStorage.removeItem("userId");
-      localStorage.removeItem("userRole");
-      navigate("/", { replace: true });
+      setShowLogoutConfirm(true);
     } else {
       setSelectedItem(item);
     }
   };
 
-  const toggleDropdown = () => {
-    setIsDropdownOpen(!isDropdownOpen);
+  const handleLogoutConfirm = () => {
+    setShowLogoutConfirm(false);
+    setIsLogoutLoading(true);
+    setLogoutMessage("Logging out...");
+    localStorage.removeItem("user");
+    setTimeout(() => {
+      setLogoutMessage("Successfully Logged Out! Redirecting...");
+      setTimeout(() => {
+        navigate("/", { replace: true });
+      }, 1000);
+    }, 2000);
   };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutConfirm(false);
+  };
+
+  const toggleDropdown = () => setIsDropdownOpen((prev) => !prev);
 
   const openCreateClassModal = () => {
     setIsDropdownOpen(false);
     const newClassId = uuidv4();
     const newClassCode = generateClassCode();
-    setFormData((prev) => ({
-      ...prev,
-      classId: newClassId,
-      classCode: newClassCode,
-      subjectCode: "",
-      section: "",
-      subject: "",
-    }));
-    setIsCreateClassModalOpen(true);
+    setModalState({
+      type: "create",
+      data: {
+        classId: newClassId,
+        classCode: newClassCode,
+        subjectCode: "",
+        section: "",
+        subject: "",
+        teacherName: userDetails?.name || "",
+      },
+      joinClassCode: "",
+      joinError: "",
+    });
   };
 
-  const closeCreateClassModal = () => {
-    setIsCreateClassModalOpen(false);
-    setFormData((prev) => ({
-      ...prev,
-      classId: "",
-      classCode: "",
-      subjectCode: "",
-      section: "",
-      subject: "",
-    }));
+  const closeModal = () => {
+    setModalState({
+      type: null,
+      data: {
+        classId: "",
+        classCode: "",
+        subjectCode: "",
+        section: "",
+        subject: "",
+        teacherName: userDetails?.name || "",
+      },
+      joinClassCode: "",
+      joinError: "",
+    });
   };
 
   const openJoinClassModal = () => {
     setIsDropdownOpen(false);
-    setIsJoinClassModalOpen(true);
-    setJoinClassCode(""); // Reset join class code
-  };
-
-  const closeJoinClassModal = () => {
-    setIsJoinClassModalOpen(false);
-    setJoinClassCode("");
-    setJoinError("");
+    setModalState({
+      type: "join",
+      data: {},
+      joinClassCode: "",
+      joinError: "",
+    });
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     if (name === "classCode") {
-      setJoinClassCode(value);
+      setModalState((prev) => ({ ...prev, joinClassCode: value }));
     } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
+      setModalState((prev) => ({
+        ...prev,
+        data: { ...prev.data, [name]: value },
+      }));
     }
   };
 
   const handleCreateClass = async () => {
-    if (
-      formData.subjectCode.trim() &&
-      formData.section.trim() &&
-      formData.subject.trim() &&
-      formData.teacherName.trim() &&
-      formData.classCode.trim()
-    ) {
+    const { classId, classCode, subjectCode, section, subject, teacherName } = modalState.data;
+    if (subjectCode.trim() && section.trim() && subject.trim() && teacherName.trim() && classCode.trim()) {
       try {
         const response = await fetch("http://localhost:8080/api/classes/create", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            classId: formData.classId,
-            classCode: formData.classCode,
-            subjectCode: formData.subjectCode,
-            section: formData.section,
-            subject: formData.subject,
-            teacherName: formData.teacherName,
-            userId: userId,
+            classId,
+            classCode,
+            subjectCode,
+            section,
+            subject,
+            teacherName,
+            userId,
           }),
         });
-
         const data = await response.json();
         if (response.ok) {
           console.log("Class created successfully:", data);
-          closeCreateClassModal();
-          setSelectedItem("home"); // Refresh the class list
+          closeModal();
+          setRefreshClasses((prev) => prev + 1);
+          setSelectedItem("home");
         } else {
           setError(data.message || "Failed to create class.");
         }
@@ -213,8 +382,9 @@ const TeacherDashboard = ({ children }) => {
   };
 
   const handleJoinClass = async () => {
+    const { joinClassCode } = modalState;
     if (!joinClassCode.trim()) {
-      setJoinError("Class code is required.");
+      setModalState((prev) => ({ ...prev, joinError: "Class code is required." }));
       return;
     }
 
@@ -224,626 +394,516 @@ const TeacherDashboard = ({ children }) => {
         userId,
       });
       if (response.status === 200) {
-        closeJoinClassModal();
-        setSelectedItem("home"); // Refresh the class list
+        closeModal();
+        setRefreshClasses((prev) => prev + 1);
+        setSelectedItem("home");
       }
     } catch (err) {
-      setJoinError(err.response?.data?.message || "Failed to join class. Please try again.");
+      setModalState((prev) => ({
+        ...prev,
+        joinError: err.response?.data?.message || "Failed to join class. Please try again.",
+      }));
       console.error("Error joining class:", err.response?.data || err.message);
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
   const renderContent = () => {
     switch (selectedItem) {
       case "home":
-        return <TeacherHome userId={userId} />;
+        return <TeacherHome userId={userId} refreshClasses={refreshClasses} />;
       case "calender":
-        return <TeacherCalender userid={userId} />;
+        return <TeacherCalender userId={userId} />;
       case "settings":
-        return <TeacherSettings userid={userId} />;
-      case "logout":
-        return <div>Logout Action Placeholder</div>;
+        return <TeacherSettings userId={userId} />;
       default:
-        return <TeacherHome userId={userId} />;
+        return <TeacherHome userId={userId} refreshClasses={refreshClasses} />;
     }
   };
 
   if (loading) {
-    return <div style={{ textAlign: "center", padding: "20px" }}>Loading...</div>;
+    return <div className="loading">Loading...</div>;
   }
 
   if (!userId) {
-    return null; // Redirect will happen in useEffect
+    return null;
   }
 
   return (
-    <div style={StyleSheet.container}>
-      <div
-        style={{
-          ...StyleSheet.sidebar,
-          ...(isSidebarOpen || isHovered
-            ? StyleSheet.sidebarExpanded
-            : StyleSheet.sidebarShrunk),
-        }}
-        onMouseEnter={() => !isSidebarOpen && setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <ul style={StyleSheet.sidebarMenu}>
-          <li
-            style={{
-              ...StyleSheet.sidebarItem,
-              ...(hoveredItem === "home" ? StyleSheet.sidebarItemHover : {}),
-              ...(selectedItem === "home"
-                ? StyleSheet.sidebarItemSelected
-                : {}),
-            }}
-            onMouseEnter={() => setHoveredItem("home")}
-            onMouseLeave={() => setHoveredItem(null)}
-            onClick={() => handleItemClick("home")}
-          >
-            <FaHome style={StyleSheet.sidebarIcon} />
-            <span
-              style={{
-                ...StyleSheet.sidebarText,
-                ...(isSidebarOpen || isHovered
-                  ? StyleSheet.sidebarTextVisible
-                  : {}),
-              }}
-            >
-              Home
-            </span>
-          </li>
-
-          <li
-            style={{
-              ...StyleSheet.sidebarItem,
-              ...(hoveredItem === "calender"
-                ? StyleSheet.sidebarItemHover
-                : {}),
-              ...(selectedItem === "calender"
-                ? StyleSheet.sidebarItemSelected
-                : {}),
-            }}
-            onMouseEnter={() => setHoveredItem("calender")}
-            onMouseLeave={() => setHoveredItem(null)}
-            onClick={() => handleItemClick("calender")}
-          >
-            <FaCalendar style={StyleSheet.sidebarIcon} />
-            <span
-              style={{
-                ...StyleSheet.sidebarText,
-                ...(isSidebarOpen || isHovered
-                  ? StyleSheet.sidebarTextVisible
-                  : {}),
-              }}
-            >
-              Calender
-            </span>
-          </li>
-
-          <li
-            style={{
-              ...StyleSheet.sidebarItem,
-              ...(hoveredItem === "settings"
-                ? StyleSheet.sidebarItemHover
-                : {}),
-              ...(selectedItem === "settings"
-                ? StyleSheet.sidebarItemSelected
-                : {}),
-            }}
-            onMouseEnter={() => setHoveredItem("settings")}
-            onMouseLeave={() => setHoveredItem(null)}
-            onClick={() => handleItemClick("settings")}
-          >
-            <FaCog style={StyleSheet.sidebarIcon} />
-            <span
-              style={{
-                ...StyleSheet.sidebarText,
-                ...(isSidebarOpen || isHovered
-                  ? StyleSheet.sidebarTextVisible
-                  : {}),
-              }}
-            >
-              Settings
-            </span>
-          </li>
-
-          <li
-            style={{
-              ...StyleSheet.sidebarItem,
-              ...(hoveredItem === "logout" ? StyleSheet.sidebarItemHover : {}),
-              ...(selectedItem === "logout"
-                ? StyleSheet.sidebarItemSelected
-                : {}),
-              marginTop: "auto",
-              position: "absolute",
-              bottom: "20px",
-              width: "87.5%",
-            }}
-            onMouseEnter={() => setHoveredItem("logout")}
-            onMouseLeave={() => setHoveredItem(null)}
-            onClick={() => handleItemClick("logout")}
-          >
-            <FaSignOutAlt style={StyleSheet.sidebarIcon} />
-            <span
-              style={{
-                ...StyleSheet.sidebarText,
-                ...(isSidebarOpen || isHovered
-                  ? StyleSheet.sidebarTextVisible
-                  : {}),
-              }}
-            >
-              Logout
-            </span>
-          </li>
-        </ul>
-      </div>
-      <header style={StyleSheet.header}>
-        <div style={StyleSheet.headerLeft}>
-          <FaBars style={StyleSheet.toggleIcon} onClick={toggleSidebar} />
-          <div style={StyleSheet.logoContainer}>
-            <span style={StyleSheet.appName}>Teacher Classroom</span>
-          </div>
-        </div>
-        <div style={StyleSheet.headerRight}>
-          <div style={StyleSheet.dropdownContainer} ref={dropdownRef}>
-            <span style={StyleSheet.plusIcon} onClick={toggleDropdown}>
-              +
-            </span>
-            {isDropdownOpen && (
-              <div style={StyleSheet.dropdown}>
-                <div
-                  style={StyleSheet.dropdownItem}
-                  onClick={openCreateClassModal}
-                >
-                  Create class
-                </div>
-                <div
-                  style={StyleSheet.dropdownItem}
-                  onClick={openJoinClassModal}
-                >
-                  Join class
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div style={StyleSheet.profilecontiner}>
-            <div style={StyleSheet.profileIcon}>
-              {userDetails && userDetails.name ? userDetails.name.charAt(0).toUpperCase() : ""}
+    <div className="dashboard-container">
+      {isLogoutLoading || logoutMessage ? (
+        <div className="logout-overlay">
+          {isLogoutLoading ? (
+            <div className="logout-loading">
+              <div className="spinner"></div>
+              <p>{logoutMessage}</p>
             </div>
-            <span style={StyleSheet.accountName}>
-              {userDetails ? userDetails.name : "Loading..."}
-            </span>
-          </div>
+          ) : (
+            <p className="logout-message">{logoutMessage}</p>
+          )}
         </div>
-      </header>
-
-      <main
-        style={{
-          flex: 1,
-          marginTop: "45px",
-          marginLeft: isSidebarOpen || isHovered ? "230px" : "60px",
-          transition: "margin-left 0.3s ease",
-          minHeight: "calc(100vh - 45px)",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        {error && (
-          <div style={StyleSheet.errorMessage}>
-            {error}
-            <button
-              style={StyleSheet.closeErrorButton}
-              onClick={() => setError("")}
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        {renderContent()}
-      </main>
-
-      {/* Create Class Modal */}
-      {isCreateClassModalOpen && (
-        <div style={StyleSheet.modalOverlay}>
-          <div style={StyleSheet.modal}>
-            <h2 style={StyleSheet.modalTitle}>Create Class</h2>
-            <div style={StyleSheet.modalContent}>
-              <label style={StyleSheet.label}>Class Code</label>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <input
-                  type="text"
-                  value={formData.classCode}
-                  style={{ ...StyleSheet.input, backgroundColor: "#f0f0f0" }}
-                  disabled
+      ) : (
+        <>
+          <div
+            className={`sidebar ${isSidebarOpen || isHovered ? "expanded" : "shrunk"}`}
+            onMouseEnter={() => !isSidebarOpen && setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+          >
+            <ul className="sidebar-menu">
+              {["home", "calender", "settings", "logout"].map((item) => (
+                <SidebarItem
+                  key={item}
+                  item={item}
+                  icon={
+                    {
+                      home: FaHome,
+                      calender: FaCalendar,
+                      settings: FaCog,
+                      logout: FaSignOutAlt,
+                    }[item]
+                  }
+                  isSelected={selectedItem === item}
+                  isHovered={hoveredItem === item}
+                  onClick={handleItemClick}
+                  onMouseEnter={() => setHoveredItem(item)}
+                  onMouseLeave={() => setHoveredItem(null)}
+                  isSidebarOpen={isSidebarOpen || isHovered}
                 />
-                <button
-                  style={{
-                    padding: "8px 16px",
-                    backgroundColor: "#4CAF50",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                  }}
-                  onClick={() => navigator.clipboard.writeText(formData.classCode).then(() => alert("Class code copied to clipboard!"))}
-                >
-                  Copy
+              ))}
+            </ul>
+          </div>
+
+          <header className="header">
+            <div className="header-left">
+              <FaBars className="toggle-icon" onClick={toggleSidebar} />
+              <div className="logo-container">
+                <span className="app-name">Teacher Classroom</span>
+              </div>
+            </div>
+            <div className="header-right">
+              <div className="dropdown-container" ref={dropdownRef}>
+                <span className="plus-icon" onClick={toggleDropdown}>+</span>
+                {isDropdownOpen && (
+                  <div className="dropdown">
+                    <div className="dropdown-item" onClick={openCreateClassModal}>
+                      Create class
+                    </div>
+                    <div className="dropdown-item" onClick={openJoinClassModal}>
+                      Join class
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="profile-container">
+                <div className="profile-icon">
+                  {userDetails && userDetails.name ? userDetails.name.charAt(0).toUpperCase() : ""}
+                </div>
+                <span className="account-name">
+                  {userDetails ? userDetails.name : "Loading..."}
+                </span>
+              </div>
+            </div>
+          </header>
+
+          <main className={`main-content ${isSidebarOpen || isHovered ? "expanded" : "shrunk"}`}>
+            {error && (
+              <div className="error-message">
+                {error}
+                <button className="close-error-button" onClick={() => setError("")}>
+                  ✕
                 </button>
               </div>
-              <label style={StyleSheet.label}>Section</label>
-              <input
-                type="text"
-                name="section"
-                value={formData.section}
-                onChange={handleInputChange}
-                style={StyleSheet.input}
-                placeholder="Enter section"
-                required
-              />
-              <label style={StyleSheet.label}>Subject</label>
-              <input
-                type="text"
-                name="subject"
-                value={formData.subject}
-                onChange={handleInputChange}
-                style={StyleSheet.input}
-                placeholder="Enter subject"
-                required
-              />
-              <label style={StyleSheet.label}>Subject Code</label>
-              <input
-                type="text"
-                name="subjectCode"
-                value={formData.subjectCode}
-                onChange={handleInputChange}
-                style={StyleSheet.input}
-                placeholder="Enter subject Code"
-                required
-              />
-              <label style={StyleSheet.label}>Teacher Name</label>
-              <input
-                type="text"
-                value={formData.teacherName}
-                style={{ ...StyleSheet.input, backgroundColor: "#f0f0f0" }}
-                disabled
-              />
-            </div>
-            <div style={StyleSheet.modalActions}>
-              <button
-                style={StyleSheet.cancelButton}
-                onClick={closeCreateClassModal}
-              >
-                Cancel
-              </button>
-              <button
-                style={StyleSheet.submitButton}
-                onClick={handleCreateClass}
-                disabled={
-                  !formData.subjectCode.trim() ||
-                  !formData.section.trim() ||
-                  !formData.subject.trim() ||
-                  !formData.teacherName.trim() ||
-                  !formData.classCode.trim()
-                }
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            )}
+            {renderContent()}
+          </main>
 
-      {/* Join Class Modal */}
-      {isJoinClassModalOpen && (
-        <div style={StyleSheet.modalOverlay}>
-          <div style={StyleSheet.modal}>
-            <h2 style={StyleSheet.modalTitle}>Join Class</h2>
-            <div style={StyleSheet.modalContent}>
-              <label style={StyleSheet.label}>Class Code</label>
-              <input
-                type="text"
-                name="classCode"
-                value={joinClassCode}
-                onChange={handleInputChange}
-                style={StyleSheet.input}
-                placeholder="Enter class code"
-                required
-              />
-              {joinError && (
-                <div style={{ color: "red", marginTop: "10px" }}>{joinError}</div>
-              )}
-            </div>
-            <div style={StyleSheet.modalActions}>
-              <button
-                style={StyleSheet.cancelButton}
-                onClick={closeJoinClassModal}
-              >
-                Cancel
-              </button>
-              <button
-                style={StyleSheet.submitButton}
-                onClick={handleJoinClass}
-                disabled={!joinClassCode.trim()}
-              >
-                Join
-              </button>
-            </div>
-          </div>
-        </div>
+          {modalState.type === "create" && (
+            <CreateClassModal
+              formData={modalState.data}
+              onChange={handleInputChange}
+              onSubmit={handleCreateClass}
+              onClose={closeModal}
+              onCopy={() => navigator.clipboard.writeText(modalState.data.classCode).then(() => alert("Class code copied to clipboard!"))}
+            />
+          )}
+
+          {modalState.type === "join" && (
+            <JoinClassModal
+              joinClassCode={modalState.joinClassCode}
+              onChange={handleInputChange}
+              onSubmit={handleJoinClass}
+              onClose={closeModal}
+              joinError={modalState.joinError}
+            />
+          )}
+
+          {showLogoutConfirm && (
+            <LogoutConfirmationModal
+              onConfirm={handleLogoutConfirm}
+              onCancel={handleLogoutCancel}
+            />
+          )}
+        </>
       )}
     </div>
   );
 };
-const StyleSheet = {
-  container: {
-    display: "flex",
-    minHeight: "100vh",
-    width: "100vw",
-  },
-  sidebar: {
-    backgroundColor: "#FFFFFF",
-    boxShadow: "2px 0 5px rgba(0,0,0,0.1)",
-    height: "100vh",
-    position: "fixed",
-    top: 15,
-    left: 0,
-    transition: "width 0.3s ease",
-    overflow: "visible",
-    zIndex: 10,
-    display: "flex",
-    flexDirection: "column",
-  },
-  sidebarShrunk: {
-    width: "60px",
-  },
-  sidebarExpanded: {
-    width: "200px",
-  },
-  sidebarMenu: {
-    listStyle: "none",
-    padding: "0",
-    margin: "0",
-    marginTop: "64px",
-    display: "flex",
-    flexDirection: "column",
-    height: "100%",
-  },
-  sidebarItem: {
-    margin: 0,
-    display: "flex",
-    marginTop: 15,
-    alignItems: "center",
-    padding: "15px 5px 15px 20px",
-    color: "#5F6368",
-    cursor: "pointer",
-    transition: "background-color 0.2s",
-  },
-  sidebarItemHover: {
-    backgroundColor: "#F1F3F4",
-    borderRadius: 20,
-  },
-  sidebarItemSelected: {
-    backgroundColor: "#E8F0FE",
-    color: "#1A73E8",
-    borderRadius: 20,
-  },
-  sidebarIcon: {
-    fontSize: "24px",
-    marginRight: "15px",
-    width: "24px",
-    flexShrink: 0,
-  },
-  sidebarText: {
-    fontSize: "16px",
-    whiteSpace: "nowrap",
-    opacity: 0,
-    transition: "opacity 0.3s ease",
-  },
-  sidebarTextVisible: {
-    opacity: 1,
-  },
-  header: {
-    backgroundColor: "#FFFFFF",
-    padding: "10px 10px 10px 20px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: 45,
-    zIndex: 20,
-  },
-  headerLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "15px",
-  },
-  toggleIcon: {
-    fontSize: "24px",
-    color: "#5F6368",
-    cursor: "pointer",
-  },
-  logoContainer: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  },
-  appName: {
-    fontSize: "24px",
-    fontWeight: "500",
-    color: "#000000",
-  },
-  headerRight: {
-    display: "flex",
-    alignItems: "center",
-    gap: "25px",
-    marginRight: "55px",
-    position: "relative",
-  },
-  dropdownContainer: {
-    position: "relative",
-  },
-  plusIcon: {
-    fontSize: "34px",
-    fontWeight: "bold",
-    color: "#5F6368",
-    cursor: "pointer",
-  },
-  dropdown: {
-    position: "absolute",
-    top: "40px",
-    right: "0",
-    backgroundColor: "#fff",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-    borderRadius: "4px",
-    zIndex: 30,
-    width: "150px",
-    overflow: "hidden",
-  },
-  dropdownItem: {
-    padding: "15px 20px",
-    fontSize: "18px",
-    color: "#202124",
-    cursor: "pointer",
-    transition: "background-color 0.2s",
-  },
-  "dropdownItem:hover": {
-    backgroundColor: "#f1f3f4",
-  },
-  profilecontiner: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 5,
-    padding: "2px 10px",
-  },
-  profileIcon: {
-    width: "36px",
-    height: "36px",
-    backgroundColor: " #C0C0C0",
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: 'center',
-    justifyContent: "center",
-    color: "#707070",
-    fontSize: "1.44rem",
-    cursor: "pointer",
 
-  },
-  modalOverlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100vw",
-    height: "100vh",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 2000,
-  },
-  modal: {
-    backgroundColor: "#ffffff",
-    borderRadius: "12px",
-    width: "400px",
-    maxWidth: "100%",
-    padding: "20px",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)",
-  },
-  modalTitle: {
-    fontSize: "1.5rem",
-    fontWeight: "bold",
-    marginBottom: "20px",
-    color: "#333",
-  },
-  modalContent: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "15px",
-  },
-  label: {
-    fontSize: "0.9rem",
-    fontWeight: "500",
-    color: "#333",
-  },
-  input: {
-    width: "90%",
-    padding: "10px",
-    fontSize: "1rem",
-    border: "1px solid #ddd",
-    borderRadius: "8px",
-    outline: "none",
-    transition: "border-color 0.2s ease",
-    "&:focus": {
-      borderColor: "#1abc9c",
-    },
-  },
-  modalActions: {
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: "10px",
-    marginTop: "20px",
-  },
-  cancelButton: {
-    padding: "10px 20px",
-    fontSize: "0.9rem",
-    color: "#666",
-    backgroundColor: "#f0f0f0",
-    border: "none",
-    borderRadius: "8px",
-    cursor: "pointer",
-    transition: "background-color 0.2s ease",
-    "&:hover": {
-      backgroundColor: "#e0e0e0",
-    },
-  },
-  submitButton: {
-    padding: "10px 20px",
-    fontSize: "0.9rem",
-    color: "#ffffff",
-    backgroundColor: "#1abc9c",
-    border: "none",
-    borderRadius: "8px",
-    cursor: "pointer",
-    transition: "background-color 0.2s ease",
-    "&:hover": {
-      backgroundColor: "#16a085",
-    },
-    "&:disabled": {
-      backgroundColor: "#bdc3c7",
-      cursor: "not-allowed",
-    },
-  },
-  errorMessage: {
-    backgroundColor: "#ffebee",
-    color: "#c62828",
-    padding: "10px 15px",
-    borderRadius: "8px",
-    margin: "10px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    fontSize: "0.9rem",
-  },
-}
+// Updated CSS for TeacherDashboard
+const styleSheet = document.createElement("style");
+styleSheet.innerHTML = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes modalFadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .dashboard-container {
+    display: flex;
+    min-height: 100vh;
+    width: 100vw;
+    overflow-x: hidden;
+  }
+  .sidebar {
+    background-color: #FFFFFF;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    height: 100vh;
+    position: fixed;
+    top: 15px;
+    left: 0;
+    transition: width 0.3s ease-in-out;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar.shrunk {
+    width: 60px;
+  }
+  .sidebar.expanded {
+    width: 200px;
+  }
+  .sidebar-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    margin-top: 64px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  .sidebar-item {
+    margin: 0;
+    display: flex;
+    margin-top: 15px;
+    align-items: center;
+    padding: 15px 5px 15px 20px;
+    color: #5F6368;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .sidebar-item.hovered {
+    background-color: #F1F3F4;
+    border-radius: 20px;
+  }
+  .sidebar-item.selected {
+    background-color: #E8F0FE;
+    color: #1A73E8;
+    border-radius: 20px;
+  }
+  .sidebar-icon {
+    font-size: 24px;
+    margin-right: 15px;
+    width: 24px;
+    flex-shrink: 0;
+  }
+  .sidebar-text {
+    font-size: 16px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .sidebar-text.visible {
+    opacity: 1;
+  }
+  .header {
+    background-color: #FFFFFF;
+    padding: 10px 10px 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 45px;
+    z-index: 20;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+  .toggle-icon {
+    font-size: 24px;
+    color: #5F6368;
+    cursor: pointer;
+  }
+  .logo-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .app-name {
+    font-size: 24px;
+    font-weight: 500;
+    color: #000000;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    margin-right: 55px;
+    position: relative;
+  }
+  .dropdown-container {
+    position: relative;
+  }
+  .plus-icon {
+    font-size: 34px;
+    font-weight: bold;
+    color: #5F6368;
+    cursor: pointer;
+  }
+  .dropdown {
+    position: absolute;
+    top: 40px;
+    right: 0;
+    background-color: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    z-index: 30;
+    width: 150px;
+    overflow: hidden;
+  }
+  .dropdown-item {
+    padding: 15px 20px;
+    font-size: 18px;
+    color: #202124;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  .dropdown-item:hover {
+    background-color: #f1f3f4;
+  }
+  .profile-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 5px;
+    padding: 2px 10px;
+  }
+  .profile-icon {
+    width: 36px;
+    height: 36px;
+    background-color: #C0C0C0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #707070;
+    font-size: 1.44rem;
+    cursor: pointer;
+  }
+  .main-content {
+    flex: 1;
+    margin-top: 45px;
+    transition: margin-left 0.3s ease-in-out;
+    min-height: calc(100vh - 45px);
+    display: flex;
+    flex-direction: column;
+  }
+  .main-content.shrunk {
+    margin-left: 60px;
+  }
+  .main-content.expanded {
+    margin-left: 200px;
+  }
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+  }
+  .modal {
+    background-color: #ffffff;
+    border-radius: 12px;
+    width: 450px;
+    max-width: 90%;
+    padding: 30px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    animation: modalFadeIn 0.3s ease;
+  }
+  .modal-title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin-bottom: 25px;
+    color: #2c3e50;
+    text-align: center;
+  }
+  .modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .label {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #34495e;
+  }
+  .input {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    border: 1px solid #dfe6e9;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .input:focus {
+    border-color: #1abc9c;
+    box-shadow: 0 0 5px rgba(26, 188, 156, 0.3);
+  }
+  .input.disabled {
+    background-color: #f5f6fa;
+    color: #7f8c8d;
+  }
+  .class-code-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+  .copy-button {
+    padding: 8px 20px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+  }
+  .copy-button:hover {
+    background-color: #2980b9;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+    margin-top: 30px;
+  }
+  .cancel-button {
+    padding: 10px 25px;
+    font-size: 1rem;
+    color: #ffffff;
+    background-color: #e74c3c;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  .cancel-button:hover {
+    background-color: #c0392b;
+  }
+  .submit-button {
+    padding: 10px 25px;
+    font-size: 1rem;
+    color: #ffffff;
+    background-color: #2ecc71;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  .submit-button:hover {
+    background-color: #27ae60;
+  }
+  .submit-button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+  }
+  .error-message {
+    background-color: #ffebee;
+    color: #c62828;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+  .close-error-button {
+    background: none;
+    border: none;
+    color: #c62828;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+  .loading {
+    text-align: center;
+    padding: 20px;
+    font-size: 1.2rem;
+    color: #7f8c8d;
+  }
+  .logout-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(255, 255, 255, 0.95);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 3000;
+  }
+  .logout-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #e0e0e0;
+    border-top: 5px solid #2ecc71;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  .logout-message {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-size: 28px;
+    color: #2ecc71;
+    font-family: 'Roboto', sans-serif;
+    text-align: center;
+  }
+`;
+document.head.appendChild(styleSheet);
 
 export default TeacherDashboard;

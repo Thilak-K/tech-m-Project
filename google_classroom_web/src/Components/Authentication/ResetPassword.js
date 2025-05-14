@@ -8,8 +8,10 @@ const ResetPassword = () => {
   const [message, setMessage] = useState("");
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirectLoading, setIsRedirectLoading] = useState(false); // New state for redirect loading
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isResetSuccessful, setIsResetSuccessful] = useState(false); // Track reset success
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -18,7 +20,7 @@ const ResetPassword = () => {
 
   // Validate password
   const validatePassword = (password) =>
-    /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/.test(password);
+    /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password);
 
   // Handle input change
   const handleInputChange = (e) => {
@@ -29,7 +31,7 @@ const ResetPassword = () => {
         ...prev,
         newPassword: validatePassword(value)
           ? ""
-          : "Password must be at least 8 characters with one letter and one number",
+          : "Password must be at least 8 characters with one letter, one number, and one special character",
       }));
     } else if (name === "confirmPassword") {
       setConfirmPassword(value);
@@ -59,7 +61,7 @@ const ResetPassword = () => {
     if (!newPassword) newErrors.newPassword = "New password is required";
     else if (!validatePassword(newPassword))
       newErrors.newPassword =
-        "Password must be at least 8 characters with one letter and one number";
+        "Password must be at least 8 characters with one letter, one number, and one special character";
     if (!confirmPassword) newErrors.confirmPassword = "Confirm password is required";
     else if (newPassword !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match";
@@ -82,7 +84,10 @@ const ResetPassword = () => {
       const data = await response.json();
       if (response.ok) {
         setMessage(data.message || "Password reset successful!");
-        setTimeout(() => navigate("/login"), 2000); // Redirect to login after 2 seconds
+        setIsResetSuccessful(true); // Mark reset as successful
+        setNewPassword(""); // Clear form
+        setConfirmPassword("");
+        setErrors({});
       } else {
         setMessage(data.message || "Failed to reset password.");
       }
@@ -90,6 +95,14 @@ const ResetPassword = () => {
       setMessage("An error occurred. Please try again later.");
     }
     setIsLoading(false);
+  };
+
+  // Handle "Back to Login" button click with loading animation
+  const handleBackToLogin = () => {
+    setIsRedirectLoading(true);
+    setTimeout(() => {
+      navigate("/"); // Navigate to login page after a short delay
+    }, 1000); // 1-second delay for the loading animation
   };
 
   // Check if token is present
@@ -101,85 +114,121 @@ const ResetPassword = () => {
 
   return (
     <div style={styles.pageContainer}>
-      <div style={styles.resetCard}>
-        <h1 style={styles.tittle}>Classroom</h1>
-        <h2 style={styles.title}>Reset Password</h2>
-        <p style={styles.subtitle}>Enter your new password below</p>
+      {isRedirectLoading ? (
+        <div style={styles.loadingContainer}>
+          <div style={styles.spinner}></div>
+          <p style={styles.loadingText}>Redirecting to Login...</p>
+        </div>
+      ) : (
+        <div style={styles.resetCard}>
+          <h1 style={styles.tittle}>Classroom</h1>
+          <h2 style={styles.title}>Reset Password</h2>
+         
 
-        <form onSubmit={handleSubmit} style={styles.formContainer}>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>New Password</label>
-            <div style={{ position: "relative" }}>
-              <input
-                type={showPassword ? "text" : "password"}
-                name="newPassword"
-                value={newPassword}
-                onChange={handleInputChange}
-                style={{
-                  ...styles.input,
-                  borderColor: errors.newPassword ? "#ef5350" : newPassword && validatePassword(newPassword) ? "#4caf50" : "#e0e0e0",
-                }}
-                placeholder="Enter new password"
-              />
-              <span
-                onClick={() => toggleShowPassword("newPassword")}
-                style={styles.eyeIcon}
+          {!isResetSuccessful ? (
+            <form onSubmit={handleSubmit} style={styles.formContainer}>
+               <p style={styles.subtitle}>Enter your new password below</p>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>New Password</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="newPassword"
+                    value={newPassword}
+                    onChange={handleInputChange}
+                    style={{
+                      ...styles.input,
+                      borderColor: errors.newPassword
+                        ? "#ef5350"
+                        : newPassword && validatePassword(newPassword)
+                        ? "#4caf50"
+                        : "#e0e0e0",
+                    }}
+                    placeholder="Enter new password"
+                  />
+                  <span
+                    onClick={() => toggleShowPassword("newPassword")}
+                    style={styles.eyeIcon}
+                  >
+                    {showPassword ? <FaEye /> : <FaEyeSlash />}
+                  </span>
+                </div>
+                {errors.newPassword && <span style={styles.error}>{errors.newPassword}</span>}
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Confirm Password</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    value={confirmPassword}
+                    onChange={handleInputChange}
+                    style={{
+                      ...styles.input,
+                      borderColor: errors.confirmPassword
+                        ? "#ef5350"
+                        : confirmPassword && confirmPassword === newPassword
+                        ? "#4caf50"
+                        : "#e0e0e0",
+                    }}
+                    placeholder="Confirm new password"
+                  />
+                  <span
+                    onClick={() => toggleShowPassword("confirmPassword")}
+                    style={styles.eyeIcon}
+                  >
+                    {showConfirmPassword ? <FaEye /> : <FaEyeSlash />}
+                  </span>
+                </div>
+                {errors.confirmPassword && (
+                  <span style={styles.error}>{errors.confirmPassword}</span>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                style={styles.submitButton}
+                disabled={
+                  isLoading ||
+                  !token ||
+                  !newPassword ||
+                  !confirmPassword ||
+                  newPassword !== confirmPassword
+                }
               >
-                {showPassword ? <FaEye /> : <FaEyeSlash />}
-              </span>
-            </div>
-            {errors.newPassword && <span style={styles.error}>{errors.newPassword}</span>}
-          </div>
+                {isLoading ? "Resetting..." : "Reset Password"}
+              </button>
 
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Confirm Password</label>
-            <div style={{ position: "relative" }}>
-              <input
-                type={showConfirmPassword ? "text" : "password"}
-                name="confirmPassword"
-                value={confirmPassword}
-                onChange={handleInputChange}
-                style={{
-                  ...styles.input,
-                  borderColor: errors.confirmPassword ? "#ef5350" : confirmPassword && confirmPassword === newPassword ? "#4caf50" : "#e0e0e0",
-                }}
-                placeholder="Confirm new password"
-              />
-              <span
-                onClick={() => toggleShowPassword("confirmPassword")}
-                style={styles.eyeIcon}
+              {message && (
+                <span
+                  style={{
+                    ...styles.error,
+                    color: message.includes("successful") ? "#4caf50" : "#ef5350",
+                  }}
+                >
+                  {message}
+                </span>
+              )}
+            </form>
+          ) : (
+            <div style={styles.successContainer}>
+              <span style={{ ...styles.error, color: "#4caf50" }}>{message}</span>
+              <button
+                onClick={handleBackToLogin}
+                style={styles.backToLoginButton}
               >
-                {showConfirmPassword ? <FaEye /> : <FaEyeSlash />}
-              </span>
+                Back to Login
+              </button>
             </div>
-            {errors.confirmPassword && <span style={styles.error}>{errors.confirmPassword}</span>}
-          </div>
-
-          <button
-            type="submit"
-            style={styles.submitButton}
-            disabled={isLoading || !token || !newPassword || !confirmPassword || newPassword !== confirmPassword}
-          >
-            {isLoading ? "Resetting..." : "Reset Password"}
-          </button>
-
-          {message && (
-            <span
-              style={{
-                ...styles.error,
-                color: message.includes("successful") ? "#4caf50" : "#ef5350",
-              }}
-            >
-              {message}
-            </span>
           )}
-        </form>
-      </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Reuse styles from LoginAndSign.js for consistency
+// Updated styles to include loading animation and "Back to Login" button
 const styles = {
   pageContainer: {
     display: "flex",
@@ -278,6 +327,60 @@ const styles = {
     marginTop: "0.5rem",
     display: "block",
   },
+  successContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "1rem",
+  },
+  backToLoginButton: {
+    width: "97%",
+    padding: "12px",
+    backgroundColor: "#10b981",
+    border: "none",
+    borderRadius: "10px",
+    fontSize: "1rem",
+    fontWeight: "500",
+    color: "#ffffff",
+    cursor: "pointer",
+    transition: "background-color 0.3s, transform 0.1s",
+    "&:hover": {
+      backgroundColor: "#059669",
+      transform: "translateY(-1px)",
+    },
+    "&:active": {
+      transform: "translateY(0)",
+    },
+  },
+  loadingContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "1rem",
+  },
+  spinner: {
+    width: "40px",
+    height: "40px",
+    border: "4px solid #e0e0e0",
+    borderTop: "4px solid #3b82f6",
+    borderRadius: "50%",
+    animation: "spin 1s linear infinite",
+  },
+  loadingText: {
+    fontSize: "1rem",
+    color: "#666",
+  },
 };
+
+// Add the CSS animation for the spinner
+const styleSheet = document.createElement("style");
+styleSheet.type = "text/css";
+styleSheet.innerText = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(styleSheet);
 
 export default ResetPassword;

@@ -1,65 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { IoMdDocument } from "react-icons/io";
 import { AiOutlineCheckCircle } from "react-icons/ai";
 import { BsClipboardCheck } from "react-icons/bs";
 import { MdAnnouncement } from "react-icons/md";
 import axios from 'axios';
 
-import TeacherHomework from "./TeacherHomework";
-import TeacherSubmission from "./TeacherSubmission";
-import TeacherAttendance from "./TeacherAttendence";
-import TeacherAnnouncement from "./TeacherAnnoucement";
-
-// Model for Quick Actions
 const quickActions = [
-  {
-    icon: <IoMdDocument size={20} />,
-    label: "Homework",
-    key: "homework",
-  },
-  {
-    icon: <AiOutlineCheckCircle size={20} />,
-    label: "Submissions",
-    key: "submissions",
-  },
-  {
-    icon: <BsClipboardCheck size={20} />,
-    label: "Attendance",
-    key: "attendance",
-  },
-  {
-    icon: <MdAnnouncement size={20} />,
-    label: "Announcement",
-    key: "announcement",
-  },
+  { icon: <IoMdDocument size={20} />, label: "Homework", key: "homework" },
+  { icon: <AiOutlineCheckCircle size={20} />, label: "Submissions", key: "submissions" },
+  { icon: <BsClipboardCheck size={20} />, label: "Attendance", key: "attendance" },
+  { icon: <MdAnnouncement size={20} />, label: "Announcements", key: "announcements" },
 ];
 
-const TeacherHome = ({ userId }) => {
+const TeacherHome = ({ userId, refreshClasses }) => {
+  const navigate = useNavigate();
   const [hoveredCard, setHoveredCard] = useState(null);
   const [hoveredButton, setHoveredButton] = useState({});
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedAction, setSelectedAction] = useState(null);
-  const [selectedClassId, setSelectedClassId] = useState(null);
-  const [classes, setClasses] = useState([]); 
-  const [userNames, setUserNames] = useState({}); 
-  const [error, setError] = useState(null); 
+  const [classes, setClasses] = useState([]);
+  const [userNames, setUserNames] = useState({});
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [classToDelete, setClassToDelete] = useState(null);
+  const [studentCounts, setStudentCounts] = useState({});
 
-  const isHovered = (index, key) =>
-    hoveredButton[index] && hoveredButton[index] === key;
-
-  const getButtonStyle = (hover, active = false) => ({
-    background: hover ? "#e6f0ff" : "rgba(255, 255, 255, 0.1)",
-    border: hover ? "1px solid #4A90E2" : "1px solid #e0e0e0",
-    color: hover ? "#4A90E2" : "#555",
-    transform: active ? "scale(0.95)" : hover ? "scale(1.02)" : "scale(1)",
-    boxShadow: hover ? "0 2px 8px rgba(0, 0, 0, 0.1)" : "none",
-    ...styles.button,
-  });
-
-  const formatDate = (createdAt) => {
+  const formatDate = useCallback((createdAt) => {
     const timestamp = createdAt?.$date?.$numberLong
       ? parseInt(createdAt.$date.$numberLong, 10)
       : createdAt;
@@ -67,42 +33,38 @@ const TeacherHome = ({ userId }) => {
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
     });
-  };
+  }, []);
 
-  const openModal = (actionKey, classId) => {
-    setSelectedAction(actionKey);
-    setSelectedClassId(classId);
-    setModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setModalOpen(false);
-    setSelectedAction(null);
-    setSelectedClassId(null);
-  };
+  const handleActionClick = useCallback((actionKey, classId) => {
+    if (actionKey === "homework") {
+      navigate(`/teacher/class/${classId}/${actionKey}`, { state: { userId } });
+    } else if (actionKey === "announcements") {
+      navigate(`/teacher/class/${classId}/announcements`, { state: { userId } });
+    } else if (actionKey === "submissions") {
+      navigate(`/teacher/class/${classId}/submissions`, { state: { userId } });
+    } else if (actionKey === "attendance") {
+      navigate(`/teacher/class/${classId}/attendance`, { state: { userId } });
+    }
+  }, [navigate, userId]);
 
   useEffect(() => {
-    const fetchClasses = async () => {
+    const fetchClassesAndStudents = async () => {
       try {
-        console.log(`Fetching classes for userId: "${userId}"`);
         const createdResponse = await axios.get('http://localhost:8080/api/classes', {
-          params: { userId, type: "created" }
+          params: { userId, type: "created" },
         });
         const joinedResponse = await axios.get('http://localhost:8080/api/classes', {
-          params: { userId, type: "joined" }
+          params: { userId, type: "joined" },
         });
 
         const createdClasses = createdResponse.data.data || [];
         const joinedClasses = joinedResponse.data.data || [];
         const allClasses = [...createdClasses, ...joinedClasses];
-
-        console.log('Fetched classes:', allClasses);
         setClasses(allClasses);
-        setError(null);
 
-        const userIds = [...new Set(allClasses.map(cls => cls.userId))]; 
+        const userIds = [...new Set(allClasses.map(cls => cls.userId))];
         const userNamePromises = userIds.map(async (uid) => {
           try {
             const userResponse = await axios.get(`http://localhost:8080/api/auth/users/${uid}`);
@@ -119,6 +81,25 @@ const TeacherHome = ({ userId }) => {
           return acc;
         }, {});
         setUserNames(userNameMap);
+
+        const studentCountPromises = allClasses.map(async (cls) => {
+          try {
+            const studentResponse = await axios.get(`http://localhost:8080/api/classes/${cls.classId}/students`);
+            return { classId: cls.classId, count: studentResponse.data.data?.length || 0 };
+          } catch (err) {
+            console.error(`Error fetching students for class ${cls.classId}:`, err);
+            return { classId: cls.classId, count: 0 };
+          }
+        });
+
+        const studentCountResults = await Promise.all(studentCountPromises);
+        const studentCountMap = studentCountResults.reduce((acc, { classId, count }) => {
+          acc[classId] = count;
+          return acc;
+        }, {});
+        setStudentCounts(studentCountMap);
+
+        setError(null);
       } catch (err) {
         setError('Failed to load classes. Please try again later.');
         console.error('Error fetching classes:', err.response?.data || err.message);
@@ -129,18 +110,17 @@ const TeacherHome = ({ userId }) => {
 
     if (typeof userId === 'string' && userId.trim() !== '') {
       setLoading(true);
-      fetchClasses();
+      fetchClassesAndStudents();
     } else {
       setLoading(false);
       setError('User ID is missing. Please log in again.');
-      console.error('No valid userId provided to fetch classes:', userId);
     }
-  }, [userId]);
+  }, [userId, refreshClasses]);
 
-  const handleDeleteClass = async () => {
+  const handleDeleteClass = useCallback(async () => {
     try {
       const response = await axios.delete(`http://localhost:8080/api/classes/${classToDelete.classId}`, {
-        params: { userId }
+        params: { userId },
       });
       if (response.status === 200) {
         setClasses(classes.filter(cls => cls.classId !== classToDelete.classId));
@@ -153,139 +133,121 @@ const TeacherHome = ({ userId }) => {
       setShowDeleteConfirm(false);
       setClassToDelete(null);
     }
-  };
+  }, [classToDelete, classes, userId]);
 
-  const renderModalContent = () => {
-    switch (selectedAction) {
-      case "homework":
-        return <TeacherHomework classId={selectedClassId} />;
-      case "submissions":
-        return <TeacherSubmission classId={selectedClassId} />;
-      case "attendance":
-        return <TeacherAttendance classId={selectedClassId} />;
-      case "announcement":
-        return <TeacherAnnouncement classId={selectedClassId} />;
-      default:
-        return null;
-    }
+  const getCardColor = (index) => {
+    const colors = [
+      { start: '#2ecc71', end: '#27ae60' }, // Green
+      { start: '#3498db', end: '#2980b9' }, // Blue
+      { start: '#f1c40f', end: '#e67e22' }, // Yellow
+      { start: '#e74c3c', end: '#c0392b' }, // Red
+    ];
+    return colors[index % colors.length];
   };
 
   if (!userId) {
-    return <div style={{ textAlign: "center", padding: "20px" }}>User ID is missing. Please log in again.</div>;
+    return <div className="error-message">User ID is missing. Please log in again.</div>;
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.grid}>
+    <div className="teacher-home-container">
+      <div className="class-grid">
         {loading ? (
-          <p style={{ textAlign: 'center', color: '#333' }}>Loading classes...</p>
+          <p className="loading-text">Loading classes...</p>
         ) : error ? (
-          <div style={{ color: 'red', textAlign: 'center', marginBottom: '20px' }}>
-            {error}
-          </div>
+          <div className="error-message">{error}</div>
         ) : classes.length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#333' }}>No classes found. Create or join a class to get started.</p>
+          <p className="no-classes-text">No classes found. Create or join a class to get started.</p>
         ) : (
-          classes.map((classItem, index) => (
-            <div
-              key={classItem.classId}
-              style={{
-                ...styles.card,
-                boxShadow: hoveredCard === index
-                  ? "0 6px 16px rgba(0, 0, 0, 0.15)"
-                  : "0 2px 8px rgba(0, 0, 0, 0.1)",
-              }}
-              onMouseEnter={() => setHoveredCard(index)}
-              onMouseLeave={() => setHoveredCard(null)}
-            >
-              <div style={styles.upperDiv}>
-                <div style={styles.cardHeader}>
-                  <h1 style={styles.subject}>
-                    {classItem.subject} ({classItem.classCode})
-                  </h1>
-                  {classItem.userId === userId && (
-                    <span
-                      style={styles.dots}
-                      title="Delete Class"
-                      onClick={() => {
-                        setClassToDelete(classItem);
-                        setShowDeleteConfirm(true);
-                      }}
-                    >
-                      ⋮
-                    </span>
-                  )}
+          classes.map((classItem, index) => {
+            const cardColor = getCardColor(index);
+            return (
+              <div
+                key={classItem.classId}
+                className={`class-card ${hoveredCard === index ? "hovered" : ""}`}
+                onMouseEnter={() => setHoveredCard(index)}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div
+                  className="upper-div"
+                  style={{
+                    background: `linear-gradient(135deg, ${cardColor.start} 0%, ${cardColor.end} 100%)`,
+                  }}
+                >
+                  <div className="card-header">
+                    <h1 className="subject">
+                      {classItem.subject} - {classItem.classCode}
+                    </h1>
+                    {classItem.userId === userId && (
+                      <span
+                        className="dots"
+                        title="Delete Class"
+                        onClick={() => {
+                          setClassToDelete(classItem);
+                          setShowDeleteConfirm(true);
+                        }}
+                      >
+                        ⋮
+                      </span>
+                    )}
+                  </div>
+                  <div className="section">
+                    Section: {classItem.section}
+                  </div>
+                  <div className="student-count">
+                    Students: {studentCounts[classItem.classId] || 0}
+                  </div>
+                  <div className="created-info">
+                    Created by {userNames[classItem.userId] || 'Loading...'} | {formatDate(classItem.createdAt)}
+                  </div>
                 </div>
-                <div style={styles.section}>
-                  Section: {classItem.section}
-                </div>
-                <div style={styles.createdInfo}>
-                  By {userNames[classItem.userId] || 'Loading...'} | {formatDate(classItem.createdAt)}
-                </div>
-              </div>
 
-              <div style={styles.lowerDiv}>
-                <div style={styles.lowerDivHeading}>Quick Actions</div>
-                <div style={styles.buttonGrid}>
-                  {quickActions.map((btn) => (
-                    <button
-                      key={btn.key}
-                      style={getButtonStyle(isHovered(index, btn.key))}
-                      onClick={() => openModal(btn.key, classItem.classId)}
-                      onMouseEnter={() => setHoveredButton({ [index]: btn.key })}
-                      onMouseLeave={() => setHoveredButton({ [index]: null })}
-                      onMouseDown={(e) =>
-                        (e.currentTarget.style.transform = "scale(0.95)")
-                      }
-                      onMouseUp={(e) =>
-                        (e.currentTarget.style.transform = "scale(1.02)")
-                      }
-                    >
-                      {btn.icon}
-                      <span style={styles.buttonLabel}>{btn.label}</span>
-                    </button>
-                  ))}
+                <div className="lower-div">
+                  <div className="lower-div-heading">Quick Actions</div>
+                  <div className="button-grid">
+                    {quickActions.map((btn) => {
+                      const isButtonHovered = hoveredButton[index] === btn.key;
+                      return (
+                        <button
+                          key={btn.key}
+                          className={`action-button ${isButtonHovered ? "hovered" : ""}`}
+                          onClick={() => handleActionClick(btn.key, classItem.classId)}
+                          onMouseEnter={() => setHoveredButton({ ...hoveredButton, [index]: btn.key })}
+                          onMouseLeave={() => setHoveredButton({ ...hoveredButton, [index]: null })}
+                        >
+                          {btn.icon}
+                          <span className="button-label">{btn.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {modalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
-            <div style={styles.modalHeader}>
-              <h2>{selectedAction?.toUpperCase()}</h2>
-              <button style={styles.closeButton} onClick={closeModal}>
-                ×
-              </button>
-            </div>
-            {renderModalContent()}
-          </div>
-        </div>
-      )}
-
       {showDeleteConfirm && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
-            <div style={styles.modalHeader}>
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
               <h2>Confirm Deletion</h2>
-              <button style={styles.closeButton} onClick={() => setShowDeleteConfirm(false)}>
+              <button className="close-button" onClick={() => setShowDeleteConfirm(false)}>
                 ×
               </button>
             </div>
-            <div style={styles.modalContent}>
+            <div className="modal-content">
               <p>Are you sure you want to delete the class "{classToDelete?.subject}"?</p>
-              <div style={styles.modalActions}>
+              <div className="modal-actions">
                 <button
-                  style={styles.cancelButton}
+                  className="cancel-button"
                   onClick={() => setShowDeleteConfirm(false)}
                 >
                   Cancel
                 </button>
                 <button
-                  style={styles.deleteButton}
+                  className="delete-button"
                   onClick={handleDeleteClass}
                 >
                   Delete
@@ -299,154 +261,318 @@ const TeacherHome = ({ userId }) => {
   );
 };
 
-const styles = {
-  container: {
-    display: "flex",
-    justifyContent: "center",
-    padding: "30px",
-    backgroundColor: "#f7f9fc",
-    minHeight: "100vh",
-    width: "100%",
-    fontFamily: "'Inter', sans-serif",
-    boxSizing: "border-box",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-    gap: "20px",
-    maxWidth: "1200px",
-    width: "100%",
-    marginTop: "20px",
-    boxSizing: "border-box",
-  },
-  card: {
-    borderRadius: "10px",
-    overflow: "hidden",
-    backgroundColor: "#fff",
-    display: "flex",
-    flexDirection: "column",
-    transition: "box-shadow 0.3s ease, transform 0.2s ease",
-  },
-  upperDiv: {
-    height:'30%',
-    background: "linear-gradient(135deg, #4A90E2 0%, #357ABD 100%)",
-    padding: "12px",
-    color: "#fff",
-    borderTopLeftRadius: "10px",
-    borderTopRightRadius: "10px",
-  },
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "6px",
-  },
-  subject: {
-    fontSize: "24px",
-    fontWeight: "600",
-    margin: 0,
-    lineHeight: "1.3",
-  },
-  section: {
-    fontSize: "16px",
-    fontWeight: "500",
-    opacity: 0.9,
-    marginBottom: "4px",
-  },
-  createdInfo: {
-    fontSize: "14px",
-    opacity: 0.8,
-  },
-  dots: {
-    fontSize: "18px",
-    cursor: "pointer",
-    padding: "2px 6px",
-    borderRadius: "4px",
-    transition: "background-color 0.2s ease",
-    ":hover": {
-      backgroundColor: "rgba(255, 255, 255, 0.2)",
-    },
-  },
-  lowerDiv: {
-    padding: "10px",
-    backgroundColor: "#fff",
-    borderBottomLeftRadius: "10px",
-    borderBottomRightRadius: "10px",
-  },
-  lowerDivHeading: {
-    fontSize: "18px",
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: "8px",
-  },
-  buttonGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
-    gap: "8px",
-  },
-  button: {
-    borderRadius: "10px",
-    padding: "8px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    transition: "all 0.2s ease",
-    border: '1px solid #000000',
-    marginTop:'10px',
-    userSelect: "none",
-  },
-  buttonLabel: {
-    fontSize: "16px",
-    marginTop: "4px",
-    textAlign: "center",
-    fontWeight: "500",
-  },
-  modalOverlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1000,
-  },
-  modal: {
-    backgroundColor: "#fff",
-    borderRadius: "15px",
-    width: "500px",
-    maxHeight: "80vh",
-    overflowY: "auto",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)",
-    padding: "20px",
-  },
-  modalHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingBottom: "10px",
-    marginBottom: "15px",
-  },
-  deleteButton: {
-    padding: "10px 20px",
-    borderRadius: "5px",
-    border: "none",
-    backgroundColor: "#ff4d4d",
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: "16px",
-  },
-  closeButton: {
-    background: "none",
-    border: "none",
-    fontSize: "30px",
-    cursor: "pointer",
-    color: "#333",
-  },
-};
+const styleSheet = document.createElement("style");
+styleSheet.innerHTML = `
+  .teacher-home-container {
+    display: flex;
+    justify-content: center;
+    padding: 30px;
+    background-color: #f7f9fc;
+    min-height: 100vh;
+    width: 100%;
+    font-family: 'Inter', sans-serif;
+    box-sizing: border-box;
+  }
+  .class-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    max-width: 1200px;
+    width: 100%;
+    margin-top: 20px;
+    box-sizing: border-box;
+  }
+  .class-card {
+    width: 380px;
+    height: 400px;
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: #fff;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+  }
+  .class-card.hovered {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    transform: translateY(-5px);
+  }
+  .upper-div {
+    height: 35%;
+    padding: 15px;
+    color: #fff;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .subject {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.3;
+    font-family: 'Inter', sans-serif;
+  }
+  .section {
+    font-size: 16px;
+    font-weight: 500;
+    opacity: 0.9;
+    margin-bottom: 10px;
+  }
+  .student-count {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0.9;
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 5px 10px;
+    border-radius: 8px;
+  }
+  .created-info {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-top: 10px;
+  }
+  .dots {
+    font-size: 28px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+  .dots:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+  .lower-div {
+    flex: 1;
+    padding: 15px;
+    background-color: #fff;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .lower-div-heading {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 15px;
+  }
+  .button-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    width: 100%;
+    max-width: 350px;
+  }
+  .action-button {
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid #e0e0e0;
+    background: #ffffff;
+    color: #555;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  .action-button.hovered {
+    background: #e6f0ff;
+    border: 1px solid #4A90E2;
+    color: #4A90E2;
+    transform: scale(1.03);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  .action-button:active {
+    transform: scale(0.97);
+  }
+  .button-label {
+    font-size: 16px;
+    margin-top: 6px;
+    text-align: center;
+    font-weight: 500;
+  }
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  .modal {
+    background-color: #fff;
+    border-radius: 15px;
+    width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    padding: 20px;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+  }
+  .modal-header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #333;
+  }
+  .modal-content {
+    padding: 10px 0;
+  }
+  .modal-content p {
+    font-size: 1rem;
+    color: #333;
+    margin-bottom: 20px;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .close-button {
+    background: none;
+    border: none;
+    font-size: 30px;
+    cursor: pointer;
+    color: #333;
+    transition: color 0.2s ease;
+  }
+  .close-button:hover {
+    color: #e74c3c;
+  }
+  .cancel-button {
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: none;
+    background-color: #3498db;
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+  }
+  .cancel-button:hover {
+    background-color: #2980b9;
+  }
+  .delete-button {
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: none;
+    background-color: #e74c3c;
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+  }
+  .delete-button:hover {
+    background-color: #c0392b;
+  }
+  .loading-text {
+    text-align: center;
+    color: #333;
+    font-size: 1.1rem;
+    font-style: italic;
+  }
+  .no-classes-text {
+    text-align: center;
+    color: #333;
+    font-size: 1.1rem;
+    font-style: italic;
+  }
+  .error-message {
+    color: #e74c3c;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+  @media (max-width: 1000px) {
+    .class-grid {
+      gap: 15px;
+      max-width: 900px;
+    }
+    .class-card {
+      width: 320px;
+      height: 360px;
+    }
+    .upper-div {
+      padding: 12px;
+    }
+    .subject {
+      font-size: 20px;
+    }
+    .section {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .student-count {
+      font-size: 12px;
+      padding: 4px 8px;
+      bottom: 12px;
+      right: 12px;
+    }
+    .created-info {
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .dots {
+      font-size: 24px;
+      padding: 2px 6px;
+    }
+    .lower-div {
+      padding: 12px;
+    }
+    .lower-div-heading {
+      font-size: 16px;
+      margin-bottom: 12px;
+    }
+    .button-grid {
+      gap: 8px;
+      max-width: 300px;
+    }
+    .action-button {
+      padding: 8px;
+    }
+    .button-label {
+      font-size: 14px;
+      margin-top: 4px;
+    }
+  }
+  @media (max-width: 600px) {
+    .class-grid {
+      gap: 10px;
+      max-width: 100%;
+      padding: 0 10px;
+    }
+    .class-card {
+      width: 100%;
+      height: 340px;
+    }
+  }
+`;
+document.head.appendChild(styleSheet);
 
 export default TeacherHome;
