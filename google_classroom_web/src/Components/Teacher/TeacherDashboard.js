@@ -34,57 +34,58 @@ const SidebarItem = ({ item, icon: Icon, isSelected, isHovered, onClick, onMouse
 const CreateClassModal = ({ formData, onChange, onSubmit, onClose, onCopy }) => (
   <div className="modal-overlay">
     <div className="modal">
-      <h2 className="modal-title">Create Class</h2>
+      <h2 className="modal-title">Create a New Class</h2>
       <div className="modal-content">
-        <label className="label">Class Code</label>
-        <div className="class-code-container">
+        <div className="form-group">
+          <label className="label">Class Code</label>
+          <div className="class-code-container">
+            <input
+              type="text"
+              value={formData.classCode}
+              className="input disabled"
+              disabled
+            />
+            <button className="copy-button" onClick={onCopy}>
+              Copy 
+            </button>
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="label">Section</label>
           <input
             type="text"
-            value={formData.classCode}
-            className="input disabled"
-            disabled
+            name="section"
+            value={formData.section}
+            onChange={onChange}
+            className="input"
+            placeholder="e.g., Section A"
+            required
           />
-          <button className="copy-button" onClick={onCopy}>
-            Copy
-          </button>
         </div>
-        <label className="label">Section</label>
-        <input
-          type="text"
-          name="section"
-          value={formData.section}
-          onChange={onChange}
-          className="input"
-          placeholder="Enter section"
-          required
-        />
-        <label className="label">Subject</label>
-        <input
-          type="text"
-          name="subject"
-          value={formData.subject}
-          onChange={onChange}
-          className="input"
-          placeholder="Enter subject"
-          required
-        />
-        <label className="label">Subject Code</label>
-        <input
-          type="text"
-          name="subjectCode"
-          value={formData.subjectCode}
-          onChange={onChange}
-          className="input"
-          placeholder="Enter subject Code"
-          required
-        />
-        <label className="label">Teacher Name</label>
-        <input
-          type="text"
-          value={formData.teacherName}
-          className="input disabled"
-          disabled
-        />
+        <div className="form-group">
+          <label className="label">Subject</label>
+          <input
+            type="text"
+            name="subject"
+            value={formData.subject}
+            onChange={onChange}
+            className="input"
+            placeholder="e.g., Mathematics"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label className="label">Subject Code</label>
+          <input
+            type="text"
+            name="subjectCode"
+            value={formData.subjectCode}
+            onChange={onChange}
+            className="input"
+            placeholder="e.g., MATH101"
+            required
+          />
+        </div>
       </div>
       <div className="modal-actions">
         <button className="cancel-button" onClick={onClose}>
@@ -97,11 +98,10 @@ const CreateClassModal = ({ formData, onChange, onSubmit, onClose, onCopy }) => 
             !formData.subjectCode.trim() ||
             !formData.section.trim() ||
             !formData.subject.trim() ||
-            !formData.teacherName.trim() ||
             !formData.classCode.trim()
           }
         >
-          Create
+          Create Class
         </button>
       </div>
     </div>
@@ -349,7 +349,7 @@ const TeacherDashboard = () => {
 
   const handleCreateClass = async () => {
     const { classId, classCode, subjectCode, section, subject, teacherName } = modalState.data;
-    if (subjectCode.trim() && section.trim() && subject.trim() && teacherName.trim() && classCode.trim()) {
+    if (subjectCode.trim() && section.trim() && subject.trim() && classCode.trim()) {
       try {
         const response = await fetch("http://localhost:8080/api/classes/create", {
           method: "POST",
@@ -749,7 +749,7 @@ styleSheet.innerHTML = `
   .modal {
     background-color: #ffffff;
     border-radius: 12px;
-    width: 450px;
+    width: 500px;
     max-width: 90%;
     padding: 30px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
@@ -759,89 +759,120 @@ styleSheet.innerHTML = `
     font-size: 1.8rem;
     font-weight: 600;
     margin-bottom: 25px;
-    color: #2c3e50;
+    color: #1a202c;
     text-align: center;
+    letter-spacing: 0.5px;
   }
   .modal-content {
     display: flex;
     flex-direction: column;
     gap: 20px;
   }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
   .label {
     font-size: 1rem;
     font-weight: 500;
-    color: #34495e;
+    color: #2d3748;
+    margin-bottom: 4px;
+    letter-spacing: 0.3px;
   }
   .input {
     width: 100%;
-    padding: 12px;
+    padding: 12px 16px;
     font-size: 1rem;
-    border: 1px solid #dfe6e9;
-    border-radius: 8px;
+    font-family: 'Roboto', sans-serif;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
     outline: none;
+    background-color: #f7fafc;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   }
   .input:focus {
-    border-color: #1abc9c;
-    box-shadow: 0 0 5px rgba(26, 188, 156, 0.3);
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
   }
-  .input.disabled {
-    background-color: #f5f6fa;
-    color: #7f8c8d;
+  .input:disabled {
+    background-color: #edf2f7;
+    color: #718096;
+    cursor: not-allowed;
   }
   .class-code-container {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 10px;
   }
   .copy-button {
-    padding: 8px 20px;
-    background-color: #3498db;
+    padding: 10px 20px;
+    background-color: #4299e1;
     color: white;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s ease;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
   .copy-button:hover {
-    background-color: #2980b9;
+    background-color: #2b6cb0;
+    transform: translateY(-1px);
+  }
+  .copy-button:active {
+    transform: translateY(0);
   }
   .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 15px;
+    gap: 12px;
     margin-top: 30px;
   }
   .cancel-button {
     padding: 10px 25px;
     font-size: 1rem;
+    font-weight: 500;
     color: #ffffff;
-    background-color: #e74c3c;
+    background-color: #e53e3e;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
   .cancel-button:hover {
-    background-color: #c0392b;
+    background-color: #c53030;
+    transform: translateY(-1px);
+  }
+  .cancel-button:active {
+    transform: translateY(0);
   }
   .submit-button {
     padding: 10px 25px;
     font-size: 1rem;
+    font-weight: 500;
     color: #ffffff;
-    background-color: #2ecc71;
+    background-color: #38a169;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
   .submit-button:hover {
-    background-color: #27ae60;
+    background-color: #2f855a;
+    transform: translateY(-1px);
+  }
+  .submit-button:active {
+    transform: translateY(0);
   }
   .submit-button:disabled {
-    background-color: #bdc3c7;
+    background-color: #cbd5e0;
     cursor: not-allowed;
+    transform: none;
   }
   .error-message {
     background-color: #ffebee;

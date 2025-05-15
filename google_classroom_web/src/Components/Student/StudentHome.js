@@ -6,15 +6,18 @@ const StudentHome = ({ userId }) => {
   const [classes, setClasses] = useState([]);
   const [userNames, setUserNames] = useState({});
   const [loading, setLoading] = useState(true);
-  const [expandedClass, setExpandedClass] = useState(null); // Track the expanded class
-  const [error, setError] = useState(""); // Track errors for leaving class
+  const [error, setError] = useState("");
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [classToLeave, setClassToLeave] = useState(null);
+  const [hoveredCard, setHoveredCard] = useState(null);
   const navigate = useNavigate();
 
-  // Fetch joined classes, homework, submissions, and creator names
+  // Fetch joined classes and creator names
   useEffect(() => {
     const fetchClassesAndDetails = async () => {
       if (!userId) {
         console.error("User ID is missing.");
+        setError("User ID is missing. Please log in again.");
         setLoading(false);
         return;
       }
@@ -53,71 +56,7 @@ const StudentHome = ({ userId }) => {
         }, {});
         setUserNames(userNameMap);
 
-        // For each class, fetch homework and submissions
-        const classesWithDetails = await Promise.all(
-          joinedClasses.map(async (cls) => {
-            try {
-              // Fetch homework for the class
-              const homeworkResponse = await axios.get(
-                `http://localhost:8080/api/homework/class/${cls.classId}`,
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                }
-              );
-              const homework = homeworkResponse.data.data || [];
-
-              // Fetch submissions for the class
-              const submissionResponse = await axios.get(
-                `http://localhost:8080/api/homework/submissions/class/${cls.classId}`,
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                }
-              );
-              const submissions = submissionResponse.data || [];
-
-              // Fetch student names for each submission
-              const submissionsWithStudentNames = await Promise.all(
-                submissions.map(async (sub) => {
-                  if (!userNameMap[sub.userId]) {
-                    try {
-                      const studentResponse = await axios.get(
-                        `http://localhost:8080/api/auth/users/${sub.userId}`,
-                        {
-                          headers: {
-                            "Content-Type": "application/json",
-                          },
-                        }
-                      );
-                      userNameMap[sub.userId] = studentResponse.data.name || "Unknown";
-                    } catch (err) {
-                      console.error(`Error fetching student ${sub.userId}:`, err);
-                      userNameMap[sub.userId] = "Unknown";
-                    }
-                  }
-                  return { ...sub, studentName: userNameMap[sub.userId] };
-                })
-              );
-
-              return {
-                ...cls,
-                homework,
-                submissions: submissionsWithStudentNames,
-              };
-            } catch (err) {
-              console.error(
-                `Error fetching details for class ${cls.classId}:`,
-                err.response?.data || err.message
-              );
-              return { ...cls, homework: [], submissions: [] };
-            }
-          })
-        );
-
-        setClasses(classesWithDetails);
+        setClasses(joinedClasses);
       } catch (err) {
         console.error("Failed to fetch classes:", err.message);
         setError("Failed to fetch classes. Please try again.");
@@ -130,15 +69,14 @@ const StudentHome = ({ userId }) => {
   }, [userId]);
 
   // Function to handle leaving a class
-  const handleLeaveClass = async (classId) => {
-    const confirmLeave = window.confirm("Are you sure you want to leave this class?");
-    if (!confirmLeave) return;
+  const handleLeaveClass = async () => {
+    if (!classToLeave) return;
 
     try {
       const response = await axios.post(
         "http://localhost:8080/api/classes/leave",
         {
-          classId,
+          classId: classToLeave.classId,
           userId,
         },
         {
@@ -149,25 +87,18 @@ const StudentHome = ({ userId }) => {
       );
 
       if (response.data.message === "Successfully left the class") {
-        // Remove the class from the state
-        setClasses(classes.filter(cls => cls.classId !== classId));
-        setError(""); // Clear any previous errors
-        // If the class was expanded, collapse it
-        if (expandedClass === classId) {
-          setExpandedClass(null);
-        }
+        setClasses(classes.filter(cls => cls.classId !== classToLeave.classId));
+        setError("");
       } else {
         setError("Failed to leave the class. Please try again.");
       }
     } catch (err) {
       console.error("Error leaving class:", err.response?.data || err.message);
       setError("Failed to leave the class: " + (err.response?.data?.message || err.message));
+    } finally {
+      setShowLeaveConfirm(false);
+      setClassToLeave(null);
     }
-  };
-
-  // Check if the student has already submitted a homework
-  const hasSubmitted = (homeworkId, submissions) => {
-    return submissions.some(sub => sub.homeworkId === homeworkId && sub.userId === userId);
   };
 
   const formatDate = (dateString) => {
@@ -179,253 +110,335 @@ const StudentHome = ({ userId }) => {
     });
   };
 
-  // Toggle the expanded state of a class card
-  const toggleExpand = (classId) => {
-    setExpandedClass(expandedClass === classId ? null : classId);
+  const getCardColor = (index) => {
+    const colors = [
+      { start: '#2ecc71', end: '#27ae60' }, // Green
+      { start: '#3498db', end: '#2980b9' }, // Blue
+      { start: '#f1c40f', end: '#e67e22' }, // Yellow
+      { start: '#e74c3c', end: '#c0392b' }, // Red
+    ];
+    return colors[index % colors.length];
+  };
+
+  const handleCardClick = (classId) => {
+    navigate(`/student/class/${classId}`, { state: { userId, classId } });
   };
 
   if (loading) {
-    return <div style={StyleSheet.loading}>Loading...</div>;
+    return <div className="loading-text">Loading classes...</div>;
   }
 
   return (
-    <div style={StyleSheet.container}>
-      {error && (
-        <div style={StyleSheet.errorMessage}>
-          {error}
-          <button style={StyleSheet.closeErrorButton} onClick={() => setError("")}>
-            ✕
-          </button>
-        </div>
-      )}
-
-      {classes.length === 0 ? (
-        <p style={StyleSheet.text}>No classes found.</p>
-      ) : (
-        classes.map((cls) => (
-          <div key={cls.classId} style={StyleSheet.classCard}>
-            <div style={StyleSheet.classHeader}>
+    <div className="student-home-container">
+      <div className="class-grid">
+        {error && (
+          <div className="error-message">{error}</div>
+        )}
+        {classes.length === 0 ? (
+          <p className="no-classes-text">No classes found. Join a class to get started.</p>
+        ) : (
+          classes.map((classItem, index) => {
+            const cardColor = getCardColor(index);
+            return (
               <div
-                style={StyleSheet.classInfo}
-                onClick={() => toggleExpand(cls.classId)}
+                key={classItem.classId}
+                className={`class-card ${hoveredCard === index ? "hovered" : ""}`}
+                onMouseEnter={() => setHoveredCard(index)}
+                onMouseLeave={() => setHoveredCard(null)}
               >
-                <h3 style={StyleSheet.sectionTitle}>
-                  {cls.subject || "Unnamed Class"} ({cls.classCode || "No Code"})
-                </h3>
-                <p style={StyleSheet.text}>
-                  Section: {cls.section || cls.classCode || "N/A"}
-                </p>
-                <p style={StyleSheet.text}>
-                  Created by {userNames[cls.userId] || "Loading..."} on {formatDate(cls.createdAt)}
-                </p>
-              </div>
-              <div style={StyleSheet.headerActions}>
-                <span style={StyleSheet.toggleIcon} onClick={() => toggleExpand(cls.classId)}>
-                  {expandedClass === cls.classId ? "−" : "+"}
-                </span>
-                <button
-                  style={StyleSheet.exitButton}
-                  onClick={() => handleLeaveClass(cls.classId)}
+                <div
+                  className="card-content"
+                  style={{
+                    background: `linear-gradient(135deg, ${cardColor.start} 0%, ${cardColor.end} 100%)`,
+                  }}
+                  onClick={() => handleCardClick(classItem.classId)}
                 >
-                  Exit Class
+                  <div className="card-header">
+                    <h1 className="subject">
+                      {classItem.subject} - {classItem.classCode}
+                    </h1>
+                    <span
+                      className="dots"
+                      title="Exit Class"
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent card click navigation
+                        setClassToLeave(classItem);
+                        setShowLeaveConfirm(true);
+                      }}
+                    >
+                      ⋮
+                    </span>
+                  </div>
+                  <div className="section">
+                    Section: {classItem.section}
+                  </div>
+                  <div className="created-info">
+                    Created by {userNames[classItem.userId] || 'Loading...'} | {formatDate(classItem.createdAt)}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {showLeaveConfirm && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h2>Confirm Exit</h2>
+              <button className="close-button" onClick={() => setShowLeaveConfirm(false)}>
+                ×
+              </button>
+            </div>
+            <div className="modal-content">
+              <p>Are you sure you want to leave the class "{classToLeave?.subject}"?</p>
+              <div className="modal-actions">
+                <button
+                  className="cancel-button"
+                  onClick={() => setShowLeaveConfirm(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="leave-button"
+                  onClick={handleLeaveClass}
+                >
+                  Leave
                 </button>
               </div>
             </div>
-            {expandedClass === cls.classId && (
-              <div style={StyleSheet.detailsSection}>
-                {/* Homework Section */}
-                <div style={StyleSheet.subSection}>
-                  <h4 style={StyleSheet.subSectionTitle}>Homework</h4>
-                  {cls.homework.length === 0 ? (
-                    <p style={StyleSheet.text}>No homework assigned yet.</p>
-                  ) : (
-                    cls.homework.map((hw) => (
-                      <div key={hw.id} style={StyleSheet.homeworkItem}>
-                        <h5 style={StyleSheet.homeworkTitle}>{hw.title}</h5>
-                        <p style={StyleSheet.text}>{hw.description}</p>
-                        <p style={StyleSheet.text}>
-                          <strong>Assigned:</strong> {formatDate(hw.assignedDate)}
-                        </p>
-                        <p style={StyleSheet.text}>
-                          <strong>Due:</strong> {formatDate(hw.dueDate)}
-                        </p>
-                        {hasSubmitted(hw.id, cls.submissions) ? (
-                          <p style={StyleSheet.submittedText}>Already Submitted</p>
-                        ) : (
-                          <button
-                            style={StyleSheet.actionButton}
-                            onClick={() => navigate(`/homework/${hw.id}`, { state: { userId } })}
-                          >
-                            View & Submit
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Submissions Section */}
-                <div style={StyleSheet.subSection}>
-                  <h4 style={StyleSheet.subSectionTitle}>Submissions</h4>
-                  {cls.submissions.length === 0 ? (
-                    <p style={StyleSheet.text}>No submissions yet.</p>
-                  ) : (
-                    cls.submissions.map((sub) => (
-                      <div key={sub.id} style={StyleSheet.submissionItem}>
-                        <p style={StyleSheet.text}>
-                          <strong>Student:</strong> {sub.studentName}
-                        </p>
-                        <p style={StyleSheet.text}>
-                          <strong>Google Drive Link:</strong>{" "}
-                          {sub.driveLink ? (
-                            <a
-                              href={sub.driveLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={StyleSheet.link}
-                            >
-                              View Submission
-                            </a>
-                          ) : (
-                            "Not provided."
-                          )}
-                        </p>
-                        <p style={StyleSheet.text}>
-                          <strong>Submitted On:</strong> {formatDate(sub.submittedOn)}
-                        </p>
-                        <p style={StyleSheet.text}>
-                          <strong>Status:</strong> {sub.status}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
           </div>
-        ))
+        </div>
       )}
     </div>
   );
 };
 
-// Simple and professional styles without colors
-const StyleSheet = {
-  container: {
-    padding: "24px",
-    fontFamily: "'Roboto', sans-serif",
-    minHeight: "100vh",
-  },
-  loading: {
-    fontSize: "14px",
-    textAlign: "center",
-    padding: "16px",
-  },
-  errorMessage: {
-    fontSize: "13px",
-    padding: "8px",
-    border: "1px solid #ddd",
-    borderRadius: "4px",
-    marginBottom: "16px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  closeErrorButton: {
-    border: "none",
-    background: "none",
-    cursor: "pointer",
-    fontSize: "13px",
-  },
-  text: {
-    fontSize: "13px",
-    marginBottom: "4px",
-  },
-  submittedText: {
-    fontSize: "13px",
-    fontStyle: "italic",
-    marginTop: "8px",
-  },
-  classCard: {
-    marginBottom: "16px",
-    border: "1px solid #ddd",
-    borderRadius: "4px",
-  },
-  classHeader: {
-    padding: "12px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  classInfo: {
-    cursor: "pointer",
-    flex: 1,
-  },
-  headerActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  },
-  sectionTitle: {
-    fontSize: "16px",
-    fontWeight: "500",
-    margin: "0",
-  },
-  toggleIcon: {
-    fontSize: "16px",
-    fontWeight: "bold",
-    cursor: "pointer",
-  },
-  exitButton: {
-    padding: "6px 12px",
-    border: "1px solid #000",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "13px",
-    fontWeight: "500",
-    background: "none",
-  },
-  detailsSection: {
-    padding: "12px",
-    borderTop: "1px solid #ddd",
-  },
-  subSection: {
-    marginBottom: "16px",
-  },
-  subSectionTitle: {
-    fontSize: "14px",
-    fontWeight: "500",
-    marginBottom: "8px",
-  },
-  homeworkItem: {
-    padding: "12px",
-    border: "1px solid #ddd",
-    borderRadius: "4px",
-    marginBottom: "12px",
-  },
-  submissionItem: {
-    padding: "12px",
-    border: "1px solid #ddd",
-    borderRadius: "4px",
-    marginBottom: "12px",
-  },
-  homeworkTitle: {
-    fontSize: "13px",
-    fontWeight: "500",
-    marginBottom: "6px",
-  },
-  actionButton: {
-    padding: "6px 12px",
-    border: "1px solid #000",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "13px",
-    fontWeight: "500",
-    background: "none",
-  },
-  link: {
-    textDecoration: "underline",
-  },
-};
+const styleSheet = document.createElement("style");
+styleSheet.innerHTML = `
+  .student-home-container {
+    display: flex;
+    justify-content: center;
+    padding: 30px;
+    background-color: #f7f9fc;
+    min-height: 100vh;
+    width: 100%;
+    font-family: 'Inter', sans-serif;
+    box-sizing: border-box;
+  }
+  .class-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    max-width: 1200px;
+    width: 100%;
+    margin-top: 20px;
+    box-sizing: border-box;
+  }
+  .class-card {
+    width: 380px;
+    height: 200px; /* Adjusted height for a single container */
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: #fff;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+    cursor: pointer; /* Indicate the card is clickable */
+  }
+  .class-card.hovered {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    transform: translateY(-5px);
+  }
+  .card-content {
+    flex: 1;
+    padding: 15px;
+    color: #fff;
+    border-radius: 12px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .subject {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.3;
+    font-family: 'Inter', sans-serif;
+  }
+  .section {
+    font-size: 16px;
+    font-weight: 500;
+    opacity: 0.9;
+    margin-bottom: 10px;
+  }
+  .created-info {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-top: 10px;
+  }
+  .dots {
+    font-size: 28px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+  .dots:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  .modal {
+    background-color: #fff;
+    border-radius: 15px;
+    width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    padding: 20px;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+  }
+  .modal-header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #333;
+  }
+  .modal-content {
+    padding: 10px 0;
+  }
+  .modal-content p {
+    font-size: 1rem;
+    color: #333;
+    margin-bottom: 20px;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .close-button {
+    background: none;
+    border: none;
+    font-size: 30px;
+    cursor: pointer;
+    color: #333;
+    transition: color 0.2s ease;
+  }
+  .close-button:hover {
+    color: #e74c3c;
+  }
+  .cancel-button {
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: none;
+    background-color: #3498db;
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+  }
+  .cancel-button:hover {
+    background-color: #2980b9;
+  }
+  .leave-button {
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: none;
+    background-color: #e74c3c;
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+  }
+  .leave-button:hover {
+    background-color: #c0392b;
+  }
+  .loading-text {
+    text-align: center;
+    color: #333;
+    font-size: 1.1rem;
+    font-style: italic;
+  }
+  .no-classes-text {
+    text-align: center;
+    color: #333;
+    font-size: 1.1rem;
+    font-style: italic;
+  }
+  .error-message {
+    color: #e74c3c;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+  @media (max-width: 1000px) {
+    .class-grid {
+      gap: 15px;
+      max-width: 900px;
+    }
+    .class-card {
+      width: 320px;
+      height: 180px;
+    }
+    .card-content {
+      padding: 12px;
+    }
+    .subject {
+      font-size: 20px;
+    }
+    .section {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .created-info {
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .dots {
+      font-size: 24px;
+      padding: 2px 6px;
+    }
+  }
+  @media (max-width: 600px) {
+    .class-grid {
+      gap: 10px;
+      max-width: 100%;
+      padding: 0 10px;
+    }
+    .class-card {
+      width: 100%;
+      height: 160px;
+    }
+  }
+`;
+document.head.appendChild(styleSheet);
 
 export default StudentHome;

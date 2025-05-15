@@ -9,27 +9,23 @@ import TeacherAnnouncement from "./Components/Teacher/TeacherAnnouncement";
 import TeacherHomework from "./Components/Teacher/TeacherHomework";
 import TeacherSubmission from "./Components/Teacher/TeacherSubmission";
 import TeacherAttendance from "./Components/Teacher/TeacherAttendence";
-
 // Student component imports
 import StudentDashboard from "./Components/Student/StudentDashboard";
-import HomeworkSubmission from "./Components/Student/HomeworkSubmission";
-
+import StudentCard from "./Components/Student/StudentCard";
 
 function App() {
   return (
-  
     <Router>
       <Routes>
         <Route path="/" element={<LoginAndSign />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />
-        <Route path="/teacher-dashboard" element={<TeacherDashboard/>} />
-        <Route path="/homework/:homeworkId" element={<HomeworkSubmission />} />
+        <Route path="/teacher-dashboard" element={<TeacherDashboard />} />
         <Route path="/teacher/class/:classId/homework" element={<TeacherHomework />} />
         <Route path="/teacher/class/:classId/submissions" element={<TeacherSubmission />} />
         <Route path="/teacher/class/:classId/announcements" element={<TeacherAnnouncement />} />
         <Route path="/teacher/class/:classId/attendance" element={<TeacherAttendance />} />
-
+        <Route path="/student/class/:classId" element={<StudentCard />} />
       </Routes>
     </Router>
   );

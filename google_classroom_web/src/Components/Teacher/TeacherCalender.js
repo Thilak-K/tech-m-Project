@@ -9,7 +9,7 @@ const TeacherCalendar = ({ userId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const today = new Date();
+  const today = new Date("2025-05-14T16:00:00+05:30"); // Updated to match the current date and time (04:00 PM IST)
   const displayYear = viewDate.getFullYear();
   const displayMonth = viewDate.getMonth();
 
@@ -113,17 +113,12 @@ const TeacherCalendar = ({ userId }) => {
         return formatDateForComparison(dueDate) === formatDateForComparison(day);
       });
 
-      const isOverdue = dueHomework.some(
-        (hw) => new Date(hw.dueDate) < new Date() && !isToday
-      );
-
       return (
         <div
           key={index}
           style={{
             ...styles.day,
             ...(isToday ? styles.today : {}),
-            ...(dueHomework.length > 0 ? (isOverdue ? styles.overdueDay : styles.dueDay) : {}),
           }}
         >
           <div style={styles.dayHeader}>
@@ -139,15 +134,30 @@ const TeacherCalendar = ({ userId }) => {
             </div>
           </div>
           <div style={styles.taskArea}>
-            {dueHomework.map((hw, hwIndex) => (
-              <div key={hwIndex} style={styles.homework}>
-                <span style={styles.className}>{hw.classSubject}: </span>
-                <span style={styles.homeworkTitle}>{hw.title}</span>
-                <span style={styles.dueDateText}>
-                  Due: {new Date(hw.dueDate).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}
-                </span>
-              </div>
-            ))}
+            {dueHomework.map((hw, hwIndex) => {
+              const dueDate = new Date(hw.dueDate);
+              const isDueToday = formatDateForComparison(dueDate) === formatDateForComparison(today);
+
+              return (
+                <div
+                  key={hwIndex}
+                  style={{
+                    ...styles.homework,
+                    ...(isDueToday ? styles.homeworkDueToday : {}),
+                  }}
+                >
+                  <span style={styles.className}>{hw.classSubject}: </span>
+                  <span
+                    style={{
+                      ...styles.homeworkTitle,
+                      ...(isDueToday ? styles.homeworkTitleDueToday : {}),
+                    }}
+                  >
+                    {hw.title}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       );
@@ -242,6 +252,7 @@ const styles = {
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
     boxSizing: "border-box",
     transition: "transform 0.2s ease",
+    border: "2px solid #e0e0e0", 
   },
   dayHeader: {
     display: "flex",
@@ -276,7 +287,7 @@ const styles = {
     boxShadow: "0 2px 8px rgba(52, 152, 219, 0.4)",
   },
   dueDate: {
-    border: "2px solid #e74c3c",
+    border: "2px solid #7f8c8d", // Neutral gray border for the date circle
     backgroundColor: "#ffffff",
   },
   taskArea: {
@@ -287,13 +298,7 @@ const styles = {
     borderTop: "1px solid #e0e0e0",
   },
   today: {
-    border: "2px solid #3498db",
-  },
-  dueDay: {
-    border: "2px solid #e74c3c",
-  },
-  overdueDay: {
-    border: "2px solid #c0392b",
+    border: "2px solid #3498db", // Blue border for today
   },
   homework: {
     fontSize: "14px",
@@ -302,9 +307,12 @@ const styles = {
     padding: "10px",
     borderRadius: "6px",
     backgroundColor: "#fefefe",
-    borderLeft: "4px solid #e74c3c",
+    borderLeft: "4px solid #e0e0e0",
     transition: "background-color 0.2s ease",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.05)",
+  },
+  homeworkDueToday: {
+    borderLeft: "4px solid #e74c3c",
   },
   className: {
     fontWeight: "500",
@@ -313,14 +321,20 @@ const styles = {
   },
   homeworkTitle: {
     fontWeight: "500",
-    color: "#e74c3c",
+    color: "#2c3e50",
     display: "block",
     marginBottom: "4px",
   },
+  homeworkTitleDueToday: {
+    color: "#e74c3c",
+  },
   dueDateText: {
     fontSize: "12px",
-    color: "#e74c3c",
+    color: "#7f8c8d",
     fontStyle: "italic",
+  },
+  dueDateTextDueToday: {
+    color: "#e74c3c",
   },
   loading: {
     padding: "30px",

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { FiArrowLeft, FiCalendar } from "react-icons/fi";
+import { FiArrowLeft, FiCalendar, FiX, FiTrash2 } from "react-icons/fi";
 
 const TeacherHomework = () => {
   const { classId } = useParams();
@@ -16,6 +16,9 @@ const TeacherHomework = () => {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [homeworkToDelete, setHomeworkToDelete] = useState(null);
 
   const fetchHomeworks = useCallback(async () => {
     try {
@@ -43,6 +46,15 @@ const TeacherHomework = () => {
     }
   }, [classId, userId, fetchHomeworks]);
 
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage("");
+      }, 3000); // Disappear after 3 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
   const handlePost = useCallback(async () => {
     if (!title.trim() || !description.trim() || !dueDate) {
       setError("All fields are required.");
@@ -55,6 +67,7 @@ const TeacherHomework = () => {
       description,
       assignedDate: new Date().toISOString(),
       dueDate: new Date(dueDate).toISOString(),
+      createdBy:userId
     };
 
     try {
@@ -71,11 +84,12 @@ const TeacherHomework = () => {
       setDueDate("");
       setError("");
       setSuccessMessage("✅ Homework posted successfully!");
+      setShowModal(false);
     } catch (err) {
       const message = err.response?.data?.message || err.message || "Failed to post homework.";
       setError(message);
     }
-  }, [classId, title, description, dueDate, homeworks]);
+  }, [classId, title, description, dueDate, homeworks, userId]);
 
   const handleCancel = useCallback(() => {
     setTitle("");
@@ -83,7 +97,40 @@ const TeacherHomework = () => {
     setDueDate("");
     setError("");
     setSuccessMessage("");
+    setShowModal(false);
   }, []);
+
+  const handleDeleteClick = (homework) => {
+    setHomeworkToDelete(homework);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!homeworkToDelete) return;
+
+    try {
+      await axios.delete(`http://localhost:8080/api/homework/${homeworkToDelete.id}`, {
+        headers: { "Content-Type": "application/json" ,
+        "userId": userId
+        },
+      });
+
+      setHomeworks(homeworks.filter((hw) => hw.id !== homeworkToDelete.id));
+      setSuccessMessage("✅ Homework deleted successfully!");
+      setError("");
+    } catch (err) {
+      const message = err.response?.data?.message || err.message || "Failed to delete homework.";
+      setError(message);
+    } finally {
+      setShowDeleteConfirm(false);
+      setHomeworkToDelete(null);
+    }
+  }, [homeworks, homeworkToDelete, userId]);
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setHomeworkToDelete(null);
+  };
 
   const formatDate = useCallback((dateString) => {
     const date = new Date(dateString);
@@ -95,7 +142,7 @@ const TeacherHomework = () => {
   }, []);
 
   const isOverdue = (dueDate) => {
-    const currentDate = new Date("2025-05-14T14:20:00+05:30"); 
+    const currentDate = new Date("2025-05-14T16:04:00+05:30"); // Updated to match current date and time
     const due = new Date(dueDate);
     return due < currentDate;
   };
@@ -103,7 +150,7 @@ const TeacherHomework = () => {
   const isFormFilled = title.trim() && description.trim() && dueDate;
 
   const getCardColor = (index) => {
-    const colors = ["#2ecc71", "#3498db", "#f1c40f", "#e74c3c"]; 
+    const colors = ["#2ecc71", "#3498db", "#f1c40f", "#e74c3c"];
     return colors[index % colors.length];
   };
 
@@ -124,9 +171,14 @@ const TeacherHomework = () => {
       {error && <div className="error-banner">{error}</div>}
       {successMessage && <div className="success-banner">{successMessage}</div>}
 
-      <div className="split-layout">
+      <div className="homework-layout">
         <section className="homework-list-section">
-          <h2 className="section-title">Assigned Homework</h2>
+          <div className="section-header">
+            <h2 className="section-title">Assigned Homework</h2>
+            <button className="create-btn" onClick={() => setShowModal(true)}>
+              Create Homework
+            </button>
+          </div>
           <div className="homework-cards">
             {homeworks.length === 0 ? (
               <p className="no-homework">No homework has been assigned yet.</p>
@@ -138,6 +190,13 @@ const TeacherHomework = () => {
                   style={{ borderLeft: `5px solid ${getCardColor(index)}` }}
                 >
                   <div className="card-index">S.No: {index + 1}</div>
+                  <button
+                    className="delete-btn"
+                    onClick={() => handleDeleteClick(hw)}
+                    title="Delete Homework"
+                  >
+                    <FiTrash2 size={16} />
+                  </button>
                   <h3>{hw.title}</h3>
                   <p className="card-desc">
                     <span className="desc-label">Description: </span>
@@ -159,55 +218,93 @@ const TeacherHomework = () => {
           </div>
         </section>
 
-        <section className="create-homework-section">
-          <h2 className="section-title">Create New Homework</h2>
-          <form className="create-form" onSubmit={(e) => e.preventDefault()}>
-            <label className="form-label">
-              <span className="input-label">Title</span>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter title"
-              />
-            </label>
-            <label className="form-label">
-              <span className="input-label">Description</span>
-              <textarea
-                rows={4}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Write a description..."
-              ></textarea>
-            </label>
-            <label className="form-label">
-              <span className="input-label">Due Date</span>
-              <input
-                type="date"
-                min={new Date().toISOString().split("T")[0]}
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                placeholder="Due Date"
-              />
-            </label>
-            <div className="form-buttons">
-              <button
-                className="cancel-btn"
-                onClick={handleCancel}
-                style={{ opacity: isFormFilled ? 1 : 0.5 }}
-              >
-                Cancel
-              </button>
-              <button
-                className="post-hw-btn"
-                onClick={handlePost}
-                style={{ opacity: isFormFilled ? 1 : 0.5 }}
-              >
-                Post
-              </button>
+        {showModal && (
+          <>
+            <div className="modal-backdrop" onClick={handleCancel}></div>
+            <div className="modal">
+              <div className="modal-header">
+                <h2>Create New Homework</h2>
+                <button className="close-btn" onClick={handleCancel}>
+                  <FiX size={20} />
+                </button>
+              </div>
+              <form className="modal-form" onSubmit={(e) => e.preventDefault()}>
+                <label className="form-label">
+                  <span className="input-label">Title</span>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Enter title"
+                  />
+                </label>
+                <label className="form-label">
+                  <span className="input-label">Description</span>
+                  <textarea
+                    rows={4}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Write a description..."
+                  ></textarea>
+                </label>
+                <label className="form-label">
+                  <span className="input-label">Due Date</span>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split("T")[0]}
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    placeholder="Due Date"
+                  />
+                </label>
+                <div className="form-buttons">
+                  <button
+                    className="cancel-btn"
+                    onClick={handleCancel}
+                    style={{ opacity: isFormFilled ? 1 : 0.5 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="post-hw-btn"
+                    onClick={handlePost}
+                    style={{ opacity: isFormFilled ? 1 : 0.5 }}
+                  >
+                    Post
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
-        </section>
+          </>
+        )}
+
+        {showDeleteConfirm && (
+          <>
+            <div className="modal-backdrop" onClick={handleDeleteCancel}></div>
+            <div className="modal">
+              <div className="modal-header">
+                <h2>Confirm Deletion</h2>
+                <button className="close-btn" onClick={handleDeleteCancel}>
+                  <FiX size={20} />
+                </button>
+              </div>
+              <div className="modal-content">
+                <p>
+                  Are you sure you want to delete the homework "
+                  {homeworkToDelete?.title}"? This action cannot be undone.
+                </p>
+                <div className="form-buttons">
+                  <button className="cancel-btn" onClick={handleDeleteCancel}>
+                    Cancel
+                  </button>
+                  <button className="delete-confirm-btn" onClick={handleDeleteConfirm}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -240,17 +337,21 @@ styleSheet.innerHTML = `
   display: flex;
   align-items: center;
   transition: color 0.2s ease;
+  position: absolute;
+  left: 0;
 }
 
 .back-btn:hover {
   color: #1557b0;
 }
 
-.left-title {
+.centered-title {
   font-size: 34px;
   font-weight: 500;
   margin: 0;
   color: #202124;
+  text-align: center;
+  width: 100%;
 }
 
 .error-banner {
@@ -271,20 +372,21 @@ styleSheet.innerHTML = `
   margin-bottom: 20px;
   font-size: 14px;
   text-align: center;
+  animation: fadeOut 3s forwards;
 }
 
-.split-layout {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; display: none; }
+}
+
+.homework-layout {
   max-width: 1400px;
   margin: 0 auto;
 }
 
-.homework-list-section,
-.create-homework-section {
-  flex: 1;
-  min-width: 400px;
+.homework-list-section {
   background: #ffffff;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -292,24 +394,46 @@ styleSheet.innerHTML = `
   transition: box-shadow 0.3s ease;
 }
 
-.homework-list-section:hover,
-.create-homework-section:hover {
+.homework-list-section:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
 .section-title {
   font-size: 20px;
   font-weight: 500;
-  margin-bottom: 16px;
   color: #202124;
   text-align: center;
+  margin: 0;
+}
+
+.create-btn {
+  background: #1a73e8;
+  color: #ffffff;
+  border: none;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.create-btn:hover {
+  background: #1557b0;
 }
 
 .homework-cards {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 50vh;
+  max-height: 70vh;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -339,6 +463,21 @@ styleSheet.innerHTML = `
   font-weight: 500;
   padding: 4px 8px;
   border-radius: 4px;
+}
+
+.delete-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #e74c3c;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.delete-btn:hover {
+  color: #c0392b;
 }
 
 .homework-card h3 {
@@ -377,10 +516,74 @@ styleSheet.innerHTML = `
   color: #e74c3c;
 }
 
-.create-form {
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  padding: 20px;
+  width: 90%;
+  max-width: 500px;
+  z-index: 1001;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h2 {
+  font-size: 20px;
+  font-weight: 500;
+  color: #202124;
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #5f6368;
+  transition: color 0.2s ease;
+}
+
+.close-btn:hover {
+  color: #202124;
+}
+
+.modal-form {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.modal-content p {
+  font-size: 14px;
+  color: #202124;
+  text-align: center;
+  margin: 0;
 }
 
 .form-label {
@@ -392,7 +595,6 @@ styleSheet.innerHTML = `
   font-weight: 500;
   color: #202124;
   width: 100%;
-  max-width: 400px;
 }
 
 .input-label {
@@ -432,7 +634,6 @@ styleSheet.innerHTML = `
   gap: 12px;
   justify-content: center;
   width: 100%;
-  max-width: 400px;
 }
 
 .cancel-btn {
@@ -467,6 +668,22 @@ styleSheet.innerHTML = `
   background: #1557b0;
 }
 
+.delete-confirm-btn {
+  background: #e74c3c;
+  color: #ffffff;
+  border: none;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.delete-confirm-btn:hover {
+  background: #c0392b;
+}
+
 .loading {
   text-align: center;
   padding: 20px;
@@ -487,41 +704,37 @@ styleSheet.innerHTML = `
     padding: 16px;
   }
 
-  .split-layout {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .homework-list-section,
-  .create-homework-section {
-    min-width: 100%;
+  .homework-list-section {
+    width: 100%;
   }
 
   .homework-cards {
-    max-height: 50vh;
+    max-height: 60vh;
   }
 
   .page-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
   }
 
-  .header-left {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .back-btn {
+    position: static;
     margin-bottom: 10px;
   }
 
-  .form-label {
-    max-width: 100%;
+  .centered-title {
+    margin-top: 0;
   }
 
-  .form-buttons {
-    max-width: 100%;
+  .section-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .modal {
+    width: 95%;
+    max-width: 400px;
   }
 }
 `;
